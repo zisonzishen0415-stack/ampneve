@@ -2,14 +2,15 @@
  * ampsim_zdl.c -- AmpNeve for the Zoom MultiStomp (ZDL).
  *
  * Wraps the core (core/ampsim.c, inlined below) in the Zoom runtime ABI:
- *   - persistent state lives in the host-managed ctx[3] arena
+ *   - persistent state lives in the host-managed ctx[3] arena (2 x 144
+ *     floats, ~1.2 KB total - the arena is hundreds of KB)
  *   - params come from the params[] table (see ampsim_zdl_params.h)
  *   - block processing: 8 samples L + 8 samples R, channel-interleaved
  *   - ctx[11]/ctx[12] magic shuttle preserved
  *
- * First 4-knob release: Drive / Tone / Neve / Level. Cabinet and bass body
- * are fixed internally (cab=1.0, bass=0.5) to keep the hardware surface
- * small; the VST exposes all six knobs.
+ * Six knobs across two LineSel pages (mirrors the VST):
+ *   P1: Gain / Bass / Mid,  P2: Treble / Master / Level.
+ * Cab voicing and Neve coloration are fixed internally (brand sound).
  *
  * Build (needs TI C6000 CGT, see zdl/README.md):
  *   cl6x --c99 --opt_level=2 --opt_for_space=3 -mv6740 --abi=eabi \
@@ -42,8 +43,8 @@ AMP_CODE_SECTION(AMP_DRV_AUDIO_FUNC)
 #define AMP_RAW_TO_NORM 7.1428571f
 
 /* one Ampsim instance per channel; state float count is fixed generously
-   (Ampsim_state_size() is 388 bytes < 128 floats). */
-#define AMP_STATE_FLOATS 128u
+   (Ampsim_state_size() is 544 bytes < 144 floats = 576 bytes). */
+#define AMP_STATE_FLOATS 144u
 
 typedef struct AmpZdlState {
     uint32_t magic;
@@ -89,10 +90,6 @@ static inline void amp_zdl_init(AmpZdlState *st)
     for (i = 0; i < AMP_STATE_FLOATS; ++i) { st->memL[i] = 0.0f; st->memR[i] = 0.0f; }
     if (Ampsim_init(&st->memL, AMP_STATE_FLOATS * sizeof(float), 44100.0f) == 0) return;
     if (Ampsim_init(&st->memR, AMP_STATE_FLOATS * sizeof(float), 44100.0f) == 0) return;
-    Ampsim_set_param((Ampsim *)&st->memL, AMP_PARAM_CAB, 1.0f);   /* full cab */
-    Ampsim_set_param((Ampsim *)&st->memR, AMP_PARAM_CAB, 1.0f);
-    Ampsim_set_param((Ampsim *)&st->memL, AMP_PARAM_BASS, 0.5f);
-    Ampsim_set_param((Ampsim *)&st->memR, AMP_PARAM_BASS, 0.5f);
     st->magic = AMP_MAGIC;
     st->version = AMP_VERSION;
     st->initialized = 1u;
@@ -131,21 +128,27 @@ void AMP_DRV_AUDIO_FUNC(unsigned int *ctx)
         return;
     }
 
-    float drive = amp_param_norm(params[AMPNEVE_DRIVE_SLOT], AMPNEVE_DRIVE_DEFAULT_NORM);
-    float tone  = amp_param_norm(params[AMPNEVE_TONE_SLOT],  AMPNEVE_TONE_DEFAULT_NORM);
-    float neve  = amp_param_norm(params[AMPNEVE_NEVE_SLOT],  AMPNEVE_NEVE_DEFAULT_NORM);
-    float level = amp_param_norm(params[AMPNEVE_LEVEL_SLOT], AMPNEVE_LEVEL_DEFAULT_NORM);
+    float gain   = amp_param_norm(params[AMPNEVE_GAIN_SLOT],   AMPNEVE_GAIN_DEFAULT_NORM);
+    float bass   = amp_param_norm(params[AMPNEVE_BASS_SLOT],   AMPNEVE_BASS_DEFAULT_NORM);
+    float mid    = amp_param_norm(params[AMPNEVE_MID_SLOT],    AMPNEVE_MID_DEFAULT_NORM);
+    float treble = amp_param_norm(params[AMPNEVE_TREBLE_SLOT], AMPNEVE_TREBLE_DEFAULT_NORM);
+    float master = amp_param_norm(params[AMPNEVE_MASTER_SLOT], AMPNEVE_MASTER_DEFAULT_NORM);
+    float level  = amp_param_norm(params[AMPNEVE_LEVEL_SLOT],  AMPNEVE_LEVEL_DEFAULT_NORM);
 
     Ampsim *aL = (Ampsim *)&st->memL;
     Ampsim *aR = (Ampsim *)&st->memR;
-    Ampsim_set_param(aL, AMP_PARAM_DRIVE, drive);
-    Ampsim_set_param(aL, AMP_PARAM_TONE,  tone);
-    Ampsim_set_param(aL, AMP_PARAM_NEVE,  neve);
-    Ampsim_set_param(aL, AMP_PARAM_LEVEL, level);
-    Ampsim_set_param(aR, AMP_PARAM_DRIVE, drive);
-    Ampsim_set_param(aR, AMP_PARAM_TONE,  tone);
-    Ampsim_set_param(aR, AMP_PARAM_NEVE,  neve);
-    Ampsim_set_param(aR, AMP_PARAM_LEVEL, level);
+    Ampsim_set_param(aL, AMP_PARAM_GAIN,   gain);
+    Ampsim_set_param(aL, AMP_PARAM_BASS,   bass);
+    Ampsim_set_param(aL, AMP_PARAM_MID,    mid);
+    Ampsim_set_param(aL, AMP_PARAM_TREBLE, treble);
+    Ampsim_set_param(aL, AMP_PARAM_MASTER, master);
+    Ampsim_set_param(aL, AMP_PARAM_LEVEL,  level);
+    Ampsim_set_param(aR, AMP_PARAM_GAIN,   gain);
+    Ampsim_set_param(aR, AMP_PARAM_BASS,   bass);
+    Ampsim_set_param(aR, AMP_PARAM_MID,    mid);
+    Ampsim_set_param(aR, AMP_PARAM_TREBLE, treble);
+    Ampsim_set_param(aR, AMP_PARAM_MASTER, master);
+    Ampsim_set_param(aR, AMP_PARAM_LEVEL,  level);
 
     int i;
     for (i = 0; i < 8; i++) {

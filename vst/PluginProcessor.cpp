@@ -1,4 +1,4 @@
-﻿#include "PluginProcessor.h"
+#include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include <memory>
 
@@ -9,13 +9,13 @@ AmpNeveAudioProcessor::createParameterLayout() {
         layout.add(std::make_unique<juce::AudioParameterFloat>(
             id, name, juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), def));
     };
-    /* 6 knobs, two pages x 3, pedal style: */
-    add("drive", "Drive", 0.40f);
-    add("tone",  "Tone",  0.50f);
-    add("level", "Level", 0.80f);
-    add("bass",  "Bass",  0.50f);
-    add("neve",  "Neve",  0.60f);
-    add("cab",   "Cab",   1.00f);
+    /* 6 knobs, two pages x 3, pedal style (boutique amp): */
+    add("gain",   "Gain",   0.45f);
+    add("bass",   "Bass",   0.50f);
+    add("mid",    "Mid",    0.50f);
+    add("treble", "Treble", 0.50f);
+    add("master", "Master", 0.50f);
+    add("level",  "Level",  0.80f);
     layout.add(std::make_unique<juce::AudioParameterBool>("bypass", "Bypass", false));
     return layout;
 }
@@ -40,23 +40,23 @@ void AmpNeveAudioProcessor::releaseResources() {
 
 void AmpNeveAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) {
     juce::ScopedNoDenormals noDenormals;
-    auto* pDrive = apvts.getRawParameterValue("drive");
-    auto* pTone  = apvts.getRawParameterValue("tone");
-    auto* pLevel = apvts.getRawParameterValue("level");
-    auto* pBass  = apvts.getRawParameterValue("bass");
-    auto* pNeve  = apvts.getRawParameterValue("neve");
-    auto* pCab   = apvts.getRawParameterValue("cab");
+    auto* pGain   = apvts.getRawParameterValue("gain");
+    auto* pBass   = apvts.getRawParameterValue("bass");
+    auto* pMid    = apvts.getRawParameterValue("mid");
+    auto* pTreble = apvts.getRawParameterValue("treble");
+    auto* pMaster = apvts.getRawParameterValue("master");
+    auto* pLevel  = apvts.getRawParameterValue("level");
     auto* pBypass = apvts.getRawParameterValue("bypass");
 
     if (core == nullptr) { buffer.clear(); return; }
     if (*pBypass > 0.5f) return;  /* bypass: dry passthrough */
 
-    Ampsim_set_param(core, AMP_PARAM_DRIVE, *pDrive);
-    Ampsim_set_param(core, AMP_PARAM_TONE,  *pTone);
-    Ampsim_set_param(core, AMP_PARAM_LEVEL, *pLevel);
-    Ampsim_set_param(core, AMP_PARAM_BASS,  *pBass);
-    Ampsim_set_param(core, AMP_PARAM_NEVE,  *pNeve);
-    Ampsim_set_param(core, AMP_PARAM_CAB,   *pCab);
+    Ampsim_set_param(core, AMP_PARAM_GAIN,   *pGain);
+    Ampsim_set_param(core, AMP_PARAM_BASS,   *pBass);
+    Ampsim_set_param(core, AMP_PARAM_MID,    *pMid);
+    Ampsim_set_param(core, AMP_PARAM_TREBLE, *pTreble);
+    Ampsim_set_param(core, AMP_PARAM_MASTER, *pMaster);
+    Ampsim_set_param(core, AMP_PARAM_LEVEL,  *pLevel);
 
     const int numSamples = buffer.getNumSamples();
     if ((int)monoIn.size() < numSamples) monoIn.resize(numSamples);

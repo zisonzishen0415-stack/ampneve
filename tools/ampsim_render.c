@@ -2,7 +2,7 @@
  * Reads a 16-bit PCM WAV (mono or stereo), processes it through the core,
  * writes a stereo 16-bit WAV. Same code path as the VST/ZDL (no python).
  *
- * usage: ampsim_render <in.wav> <out.wav> [drive] [tone] [level] [bass] [neve] [cab]
+ * usage: ampsim_render <in.wav> <out.wav> [gain] [bass] [mid] [treble] [master] [level]
  */
 #ifdef _MSC_VER
 #define _CRT_SECURE_NO_WARNINGS
@@ -91,17 +91,23 @@ static float peak_of(const float* x, unsigned n) {
     return p;
 }
 
+static float rms_of(const float* x, unsigned n) {
+    float sum2 = 0.0f;
+    for (unsigned i = 0; i < n; ++i) sum2 += x[i] * x[i];
+    return n > 0u ? sqrtf(sum2 / (float)n) : 0.0f;
+}
+
 int main(int argc, char** argv) {
     if (argc < 3) {
-        fprintf(stderr, "usage: ampsim_render <in.wav> <out.wav> [drive] [tone] [level] [bass] [neve] [cab]\n");
+        fprintf(stderr, "usage: ampsim_render <in.wav> <out.wav> [gain] [bass] [mid] [treble] [master] [level]\n");
         return 1;
     }
-    float drive = argc > 3 ? (float)atof(argv[3]) : 0.4f;
-    float tone  = argc > 4 ? (float)atof(argv[4]) : 0.5f;
-    float level = argc > 5 ? (float)atof(argv[5]) : 0.8f;
-    float bass  = argc > 6 ? (float)atof(argv[6]) : 0.5f;
-    float neve  = argc > 7 ? (float)atof(argv[7]) : 0.6f;
-    float cab   = argc > 8 ? (float)atof(argv[8]) : 1.0f;
+    float gain   = argc > 3 ? (float)atof(argv[3]) : 0.45f;
+    float bass   = argc > 4 ? (float)atof(argv[4]) : 0.50f;
+    float mid    = argc > 5 ? (float)atof(argv[5]) : 0.50f;
+    float treble = argc > 6 ? (float)atof(argv[6]) : 0.50f;
+    float master = argc > 7 ? (float)atof(argv[7]) : 0.50f;
+    float level  = argc > 8 ? (float)atof(argv[8]) : 0.80f;
 
     float* in = NULL; unsigned rate = 0, n = 0;
     if (read_wav(argv[1], &in, &rate, &n) != 0) return 1;
@@ -112,12 +118,12 @@ int main(int argc, char** argv) {
     if (!mem) { fprintf(stderr, "alloc failed\n"); free(in); return 1; }
     Ampsim* a = Ampsim_init(mem, (uint32_t)(nf * sizeof(float)), (float)rate);
     if (!a) { fprintf(stderr, "init failed\n"); free(mem); free(in); return 1; }
-    Ampsim_set_param(a, AMP_PARAM_DRIVE, drive);
-    Ampsim_set_param(a, AMP_PARAM_TONE, tone);
-    Ampsim_set_param(a, AMP_PARAM_LEVEL, level);
+    Ampsim_set_param(a, AMP_PARAM_GAIN, gain);
     Ampsim_set_param(a, AMP_PARAM_BASS, bass);
-    Ampsim_set_param(a, AMP_PARAM_NEVE, neve);
-    Ampsim_set_param(a, AMP_PARAM_CAB, cab);
+    Ampsim_set_param(a, AMP_PARAM_MID, mid);
+    Ampsim_set_param(a, AMP_PARAM_TREBLE, treble);
+    Ampsim_set_param(a, AMP_PARAM_MASTER, master);
+    Ampsim_set_param(a, AMP_PARAM_LEVEL, level);
 
     float* L = (float*)malloc(n * sizeof(float));
     float* R = (float*)malloc(n * sizeof(float));
@@ -134,8 +140,8 @@ int main(int argc, char** argv) {
         for (unsigned i = 0; i < n; ++i) { L[i] *= g; R[i] *= g; }
         pk = 0.89f;
     }
-    printf("out: peak=%.3f rms=%.4f drive=%.2f tone=%.2f level=%.2f bass=%.2f neve=%.2f cab=%.2f -> %s\n",
-           pk, 0.0f, drive, tone, level, bass, neve, cab, argv[2]);
+    printf("out: peak=%.3f rms=%.4f gain=%.2f bass=%.2f mid=%.2f treble=%.2f master=%.2f level=%.2f -> %s\n",
+           pk, rms_of(L, n), gain, bass, mid, treble, master, level, argv[2]);
     int rc = write_wav(argv[2], L, R, n, rate);
     free(L); free(R); free(mem); free(in);
     return rc;

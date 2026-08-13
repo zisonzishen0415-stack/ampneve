@@ -1,16 +1,21 @@
 # AmpNeve ZDL (Zoom MultiStomp)
 
-Custom AMP-category effect for the Zoom G1on / MS-series (ZDL). Original DSP:
-soft clip (Drive) -> Neve transformer even harmonics + 1073-style EQ (Neve)
--> cabinet voicing, dark..bright (Tone) -> Level. First release exposes
-4 knobs; Cab and Bass body are fixed internally (cab=1.0, bass=0.5).
+Custom AMP-category effect for the Zoom G1on / MS-series (ZDL). Original
+boutique-amp DSP: input stage -> gain stage with touch dynamics -> tone
+network -> power stage with sag -> Neve transformer + 1073-style EQ ->
+speaker resonance + cabinet -> level. Six knobs across two LineSel pages
+(mirrors the VST):
 
-| Knob | Param | Range | Maps to |
-|---|---|---|---|
-| 1 | Drive | 0..1 | soft-clip drive |
-| 2 | Tone | 0..1 | cabinet dark..bright |
-| 3 | Neve | 0..1 | Neve coloration amount |
-| 4 | Level | 0..1 | output (0.5..1.5 gain) |
+| Page | Knob | Param | Range | Maps to |
+|---|---|---|---|---|
+| P1 | 1 | Gain | 0..1 | preamp gain + touch-dynamics base |
+| P1 | 2 | Bass | 0..1 | tone low (0.5 flat) |
+| P1 | 3 | Mid | 0..1 | tone mid (0.5 flat) |
+| P2 | 1 | Treble | 0..1 | tone high (0.5 flat) |
+| P2 | 2 | Master | 0..1 | power drive + sag amount |
+| P2 | 3 | Level | 0..1 | output (0.5..1.5 gain) |
+
+Cab voicing blend and Neve coloration are fixed internally (brand sound).
 
 ## Hardware / build status
 

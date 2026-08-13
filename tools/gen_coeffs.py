@@ -40,6 +40,7 @@ C.append('#ifndef AMPNEVE_COEFFS_H\n#define AMPNEVE_COEFFS_H\n\n')
 C.append('#define AMPNEVE_COEFFS_FS 44100.0f\n')
 C.append('typedef struct { float b0, b1, b2, a1, a2; } AmpBiquad;\n\n')
 
+# --- cab dark (TONE=0): HP90 + body180 + pres3200(Q1.2,+2.5) + LP7000(4th) ---
 hp90 = butter(FS, 90.0, 2, 'highpass')[0]
 body = peaking(FS, 180.0, 1.0, 3.0)
 pres_dark = peaking(FS, 3200.0, 1.2, 2.5)
@@ -58,19 +59,52 @@ C.append(fmt('hp90', hp90)); C.append(fmt('body180 +3dB', body)); C.append(fmt('
 for i,b in enumerate(lp_bright): C.append(fmt(f'lp9000 4th #{i}', b))
 C.append('};\n#define AMP_CAB_BRIGHT_N 4\n\n')
 
-bass = peaking(FS, 180.0, 0.8, 4.0)
-C.append('/* bass peaking */\n')
-C.append('static const AmpBiquad AMP_BASS = ')
-C.append('{ ' + ', '.join(f'{v:.9f}f' for v in bass) + ' };\n\n')
+# --- speaker resonance: 105Hz +4dB Q1.5, 3.5kHz +3dB Q2 (fixed) ---
+reso_low = peaking(FS, 105.0, 1.5, 4.0)
+reso_hi = peaking(FS, 3500.0, 2.0, 3.0)
+C.append('/* speaker resonance (fixed) */\n')
+C.append('static const AmpBiquad AMP_RESO_LOW = ')
+C.append('{ ' + ', '.join(f'{v:.9f}f' for v in reso_low) + ' };\n')
+C.append('static const AmpBiquad AMP_RESO_HIGH = ')
+C.append('{ ' + ', '.join(f'{v:.9f}f' for v in reso_hi) + ' };\n\n')
 
+# --- neve 1073-style: LF shelf 110 +2.5dB, mid 700 +1.5dB Q0.7, HF shelf 12k +1dB ---
 neve_lf = shelf(FS, 110.0, 2.5, False)
 neve_mid = peaking(FS, 700.0, 0.7, 1.5)
 neve_hf = shelf(FS, 12000.0, 1.0, True)
-C.append('/* neve 1073-style tone */\n')
+C.append('/* neve 1073-style tone (fixed brand color) */\n')
 C.append('static const AmpBiquad AMP_NEVE[] = {\n')
 C.append(fmt('lf shelf 110 +2.5dB', neve_lf)); C.append(fmt('mid 700 +1.5dB', neve_mid)); C.append(fmt('hf shelf 12k +1dB', neve_hf))
 C.append('};\n#define AMP_NEVE_N 3\n\n')
+
+# --- tone network runtime constants (Bass/Mid/Treble).
+#     Fixed center frequencies; only the linear gain A changes at runtime,
+#     so set_param needs just cos/sin/alpha constants + multiply-add. ---
+def tone_consts(f0, q, high_shelf):
+    w0 = 2.0 * np.pi * f0 / FS
+    cos_w0 = np.cos(w0)
+    sin_w0 = np.sin(w0)
+    alpha = sin_w0 / (2.0 * q) if not high_shelf else sin_w0 * np.sqrt(2.0) / 2.0
+    return cos_w0, sin_w0, alpha
+
+cb, sb, ab = tone_consts(250.0, 1.0, False)    # bass shelf-ish low (peaking at 250)
+cm, sm, am = tone_consts(700.0, 0.8, False)    # mid peaking
+ct, st, at = tone_consts(3000.0, 1.0, False)   # treble peaking (no sqrt needed)
+C.append('/* tone network runtime constants (linear gain A, no pow at runtime) */\n')
+C.append(f'#define AMP_TONE_BASS_F0 250.0f\n')
+C.append(f'#define AMP_TONE_BASS_COSW {cb:.9f}f\n')
+C.append(f'#define AMP_TONE_BASS_SINW {sb:.9f}f\n')
+C.append(f'#define AMP_TONE_BASS_ALPHA {ab:.9f}f\n')
+C.append(f'#define AMP_TONE_MID_F0 700.0f\n')
+C.append(f'#define AMP_TONE_MID_COSW {cm:.9f}f\n')
+C.append(f'#define AMP_TONE_MID_SINW {sm:.9f}f\n')
+C.append(f'#define AMP_TONE_MID_ALPHA {am:.9f}f\n')
+C.append(f'#define AMP_TONE_TREB_F0 3000.0f\n')
+C.append(f'#define AMP_TONE_TREB_COSW {ct:.9f}f\n')
+C.append(f'#define AMP_TONE_TREB_SINW {st:.9f}f\n')
+C.append(f'#define AMP_TONE_TREB_ALPHA {at:.9f}f\n')
+C.append(f'#define AMP_TONE_TREB_HIGH 1\n\n')
 C.append('#endif\n')
 
-open(OUT, 'w', encoding='utf-8').write(''.join(C))
-print('wrote', OUT, len(''.join(C)), 'bytes')
+open(OUT, 'w', encoding='utf-8', newline='\n').write(''.join(C))
+print('wrote', OUT)

@@ -1,6 +1,6 @@
 {
   "effect_name": "AmpNeve",
-  "comment": "Custom amp + cabinet + Neve-style coloration for the Zoom MultiStomp. Original DSP (not a stock clone): soft clip (drive) -> Neve transformer even harmonics + 1073-style EQ -> cabinet voicing (HP/body/presence/LP, dark..bright) -> level. Cab and bass body are fixed internally (cab=1.0, bass=0.5) in this first 4-knob release; the VST exposes all six knobs.",
+  "comment": "Custom boutique amp + cabinet + Neve-style coloration for the Zoom MultiStomp. Original DSP (not a stock clone): input stage -> gain stage with touch dynamics (Gain) -> tone network Bass/Mid/Treble -> power stage with sag (Master) -> Neve transformer even harmonics + 1073-style EQ -> speaker resonance + cabinet -> Level. Six knobs, two pages x three, mirroring the VST.",
   "audio_func_name": "Fx_AMP_AmpNeve",
   "gid": 4,
   "gid_comment": "0x04 = AMP category. SONAME prefix becomes ZDL_AMP_.",
@@ -10,18 +10,18 @@
   "flags_byte": 1,
   "params": [
     {
-      "name": "Drive",
+      "name": "Gain",
       "type": "knob",
       "max": 100,
-      "default": 40,
+      "default": 45,
       "scale": "linear",
       "audio_min": 0.0,
       "audio_max": 1.0,
-      "audio_default": 0.4,
-      "comment": "Soft-clip drive amount."
+      "audio_default": 0.45,
+      "comment": "Preamp gain + touch-dynamics base (soft = clean, hard = crunch)."
     },
     {
-      "name": "Tone",
+      "name": "Bass",
       "type": "knob",
       "max": 100,
       "default": 50,
@@ -29,18 +29,40 @@
       "audio_min": 0.0,
       "audio_max": 1.0,
       "audio_default": 0.5,
-      "comment": "Cabinet dark(0)..bright(1)."
+      "comment": "Tone-network low control (0.5 = flat)."
     },
     {
-      "name": "Neve",
+      "name": "Mid",
       "type": "knob",
       "max": 100,
-      "default": 60,
+      "default": 50,
       "scale": "linear",
       "audio_min": 0.0,
       "audio_max": 1.0,
-      "audio_default": 0.6,
-      "comment": "Neve-style coloration amount."
+      "audio_default": 0.5,
+      "comment": "Tone-network mid control (0.5 = flat)."
+    },
+    {
+      "name": "Treble",
+      "type": "knob",
+      "max": 100,
+      "default": 50,
+      "scale": "linear",
+      "audio_min": 0.0,
+      "audio_max": 1.0,
+      "audio_default": 0.5,
+      "comment": "Tone-network high control (0.5 = flat)."
+    },
+    {
+      "name": "Master",
+      "type": "knob",
+      "max": 100,
+      "default": 50,
+      "scale": "linear",
+      "audio_min": 0.0,
+      "audio_max": 1.0,
+      "audio_default": 0.5,
+      "comment": "Power-stage drive + sag amount."
     },
     {
       "name": "Level",

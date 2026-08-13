@@ -1,4 +1,4 @@
-/* core/ampsim.c - AmpNeve core (see ampsim.h). */
+/* core/ampsim.c - AmpNeve boutique amp core (see ampsim.h). */
 #include "ampsim.h"
 #include "ampsim_coeffs.h"
 
@@ -9,22 +9,37 @@ typedef struct {
 
 typedef struct {
     /* params */
-    float drive, tone, level, bass, neve, cab;
+    float gain, bass, mid, treble, master, level;
     float sample_rate;
 
-    /* soft clip stage */
-    float clip_g;               /* pre-gain into the clipper (1 + 3*drive) */
-    float clip_k;               /* dry/wet blend for drive */
+    /* input stage */
+    float in_g;
 
-    /* neve stage: 3 biquads + dc block */
+    /* gain stage (touch dynamics) */
+    float gain_drive;
+    float env;
+    float env_attack_c, env_release_c;
+    float dc_x1, dc_y1;         /* input-stage DC block */
+
+    /* tone network (bass/mid/treble peaking, runtime linear-gain) */
+    Bq tone_bass, tone_mid, tone_treble;
+
+    /* power stage */
+    float power_drive;
+    float sag_amt;
+    float sag_env;
+    float sag_attack_c, sag_release_c;
+
+    /* output transformer (Neve brand color) */
+    float neve_g;
+    float tr_x1, tr_y1;         /* transformer DC block */
     Bq neve_bq[3];
-    float dc_x1, dc_y1;         /* one-pole DC block */
-    float neve_g;               /* saturation pre-gain (fixed 1.9) */
 
-    /* cab stage: dark chain (4 bq), bright chain (4 bq), bass bq */
+    /* speaker + cabinet */
+    Bq reso_low, reso_high;
     Bq cab_dark[4];
     Bq cab_bright[4];
-    Bq bass_bq;
+    float cab_tone;             /* fixed dark/bright blend */
 
     /* level */
     float level_gain;
@@ -45,10 +60,24 @@ static void bq_load(Bq* b, const AmpBiquad* c) {
 }
 
 static float bq_run(Bq* b, float x) {
-    float v  = x - b->a1 * b->v1 - b->a2 * b->v2;
-    float y  = b->b0 * v + b->b1 * b->v1 + b->b2 * b->v2;
+    float v = x - b->a1 * b->v1 - b->a2 * b->v2;
+    float y = b->b0 * v + b->b1 * b->v1 + b->b2 * b->v2;
     b->v2 = b->v1;
     b->v1 = v;
+    return y;
+}
+
+/* Fixed-point reciprocal approximation (3 Newton steps). Used only at
+ * set_param time to build tone-network coefficients - the audio path has
+ * no division at all. */
+static float recip_approx(float x) {
+    union { float f; unsigned int u; } conv;
+    conv.f = x;
+    conv.u = 0x7EF311C3u - conv.u;
+    float y = conv.f;
+    y = y * (2.0f - x * y);
+    y = y * (2.0f - x * y);
+    y = y * (2.0f - x * y);
     return y;
 }
 
@@ -60,13 +89,33 @@ static float clip3(float x) {
     return x - 0.33333334f * x * x * x;
 }
 
+/* RBJ peaking biquad with linear gain A (0.5..1.5), fixed w0 constants.
+ * Only multiply-add + recip_approx at set_param time. */
+static void tone_peaking(Bq* b, float cosw, float alpha, float A) {
+    float invA = recip_approx(A);
+    float a0 = 1.0f + alpha * invA;
+    float inv = recip_approx(a0);
+    b->b0 = (1.0f + alpha * A) * inv;
+    b->b1 = (-2.0f * cosw) * inv;
+    b->b2 = (1.0f - alpha * A) * inv;
+    b->a1 = (-2.0f * cosw) * inv;
+    b->a2 = (1.0f - alpha * invA) * inv;
+    b->v1 = b->v2 = 0.0f;
+}
+
 static void update_stage_coeffs(Ampsim* a) {
     AmpsimState* s = &a->s;
     int i;
     for (i = 0; i < 3; ++i) bq_load(&s->neve_bq[i], &AMP_NEVE[i]);
-    for (i = 0; i < 4; ++i) bq_load(&s->cab_dark[i], &AMP_CAB_DARK[i]);
-    for (i = 0; i < 4; ++i) bq_load(&s->cab_bright[i], &AMP_CAB_BRIGHT[i]);
-    bq_load(&s->bass_bq, &AMP_BASS);
+    for (i = 0; i < 4; ++i) {
+        bq_load(&s->cab_dark[i], &AMP_CAB_DARK[i]);
+        bq_load(&s->cab_bright[i], &AMP_CAB_BRIGHT[i]);
+    }
+    bq_load(&s->reso_low, &AMP_RESO_LOW);
+    bq_load(&s->reso_high, &AMP_RESO_HIGH);
+    tone_peaking(&s->tone_bass,   AMP_TONE_BASS_COSW,   AMP_TONE_BASS_ALPHA,   1.0f);
+    tone_peaking(&s->tone_mid,    AMP_TONE_MID_COSW,    AMP_TONE_MID_ALPHA,    1.0f);
+    tone_peaking(&s->tone_treble, AMP_TONE_TREB_COSW,   AMP_TONE_TREB_ALPHA,   1.0f);
 }
 
 void Ampsim_reset(Ampsim* a) {
@@ -78,25 +127,43 @@ void Ampsim_reset(Ampsim* a) {
         s->cab_dark[i].v1 = s->cab_dark[i].v2 = 0.0f;
         s->cab_bright[i].v1 = s->cab_bright[i].v2 = 0.0f;
     }
-    s->bass_bq.v1 = s->bass_bq.v2 = 0.0f;
+    s->reso_low.v1 = s->reso_low.v2 = 0.0f;
+    s->reso_high.v1 = s->reso_high.v2 = 0.0f;
+    s->tone_bass.v1 = s->tone_bass.v2 = 0.0f;
+    s->tone_mid.v1 = s->tone_mid.v2 = 0.0f;
+    s->tone_treble.v1 = s->tone_treble.v2 = 0.0f;
+    s->env = 0.0f;
+    s->sag_env = 0.0f;
     s->dc_x1 = s->dc_y1 = 0.0f;
+    s->tr_x1 = s->tr_y1 = 0.0f;
 }
 
 Ampsim* Ampsim_init(void* mem, uint32_t bytes, float sample_rate) {
     if (!mem || bytes < Ampsim_state_size()) return NULL;
     if (sample_rate < 8000.0f) sample_rate = 44100.0f;
     Ampsim* a = (Ampsim*)mem;
-    a->s.sample_rate = sample_rate;
-    a->s.drive = 0.4f;      /* default: light drive */
-    a->s.tone  = 0.5f;
-    a->s.level = 0.8f;
-    a->s.bass  = 0.5f;
-    a->s.neve  = 0.6f;
-    a->s.cab   = 1.0f;
-    a->s.clip_g = 1.0f + 3.0f * a->s.drive;
-    a->s.clip_k = 0.5f + 0.5f * a->s.drive;
-    a->s.neve_g = 1.9f;
-    a->s.level_gain = 0.5f + a->s.level;   /* 0.5..1.5 */
+    AmpsimState* s = &a->s;
+    s->sample_rate = sample_rate;
+
+    s->gain = 0.45f;
+    s->bass = s->mid = s->treble = 0.50f;
+    s->master = 0.50f;
+    s->level = 0.80f;
+
+    s->in_g = 1.25f;
+    s->gain_drive = 0.2f + 2.6f * s->gain;
+    s->power_drive = 0.5f + 1.3f * s->master;
+    s->sag_amt = 0.45f * s->master;
+    s->neve_g = 1.9f;
+    s->cab_tone = 0.5f;
+    s->level_gain = 0.5f + s->level;
+
+    /* one-pole time constants (approx tau = 1/(fs*c)); no division */
+    s->env_attack_c  = recip_approx(sample_rate * 0.002f);  /* ~2 ms touch */
+    s->env_release_c = recip_approx(sample_rate * 0.030f);  /* ~30 ms */
+    s->sag_attack_c  = recip_approx(sample_rate * 0.001f);  /* ~1 ms */
+    s->sag_release_c = recip_approx(sample_rate * 0.200f);  /* ~200 ms */
+
     update_stage_coeffs(a);
     Ampsim_reset(a);
     return a;
@@ -108,19 +175,31 @@ void Ampsim_set_param(Ampsim* a, AmpsimParam p, float v) {
     if (v > 1.0f) v = 1.0f;
     AmpsimState* s = &a->s;
     switch (p) {
-        case AMP_PARAM_DRIVE:
-            s->drive = v;
-            s->clip_g = 1.0f + 3.0f * v;
-            s->clip_k = 0.5f + 0.5f * v;
+        case AMP_PARAM_GAIN:
+            s->gain = v;
+            s->gain_drive = 0.2f + 2.6f * v;
             break;
-        case AMP_PARAM_TONE:  s->tone = v; break;
+        case AMP_PARAM_BASS:
+            s->bass = v;
+            tone_peaking(&s->tone_bass, AMP_TONE_BASS_COSW, AMP_TONE_BASS_ALPHA, 0.5f + v);
+            break;
+        case AMP_PARAM_MID:
+            s->mid = v;
+            tone_peaking(&s->tone_mid, AMP_TONE_MID_COSW, AMP_TONE_MID_ALPHA, 0.5f + v);
+            break;
+        case AMP_PARAM_TREBLE:
+            s->treble = v;
+            tone_peaking(&s->tone_treble, AMP_TONE_TREB_COSW, AMP_TONE_TREB_ALPHA, 0.5f + v);
+            break;
+        case AMP_PARAM_MASTER:
+            s->master = v;
+            s->power_drive = 0.5f + 1.3f * v;
+            s->sag_amt = 0.45f * v;
+            break;
         case AMP_PARAM_LEVEL:
             s->level = v;
             s->level_gain = 0.5f + v;
             break;
-        case AMP_PARAM_BASS:  s->bass = v; break;
-        case AMP_PARAM_NEVE:  s->neve = v; break;
-        case AMP_PARAM_CAB:   s->cab = v; break;
     }
 }
 
@@ -128,12 +207,12 @@ float Ampsim_get_param(const Ampsim* a, AmpsimParam p) {
     if (!a) return 0.0f;
     const AmpsimState* s = &a->s;
     switch (p) {
-        case AMP_PARAM_DRIVE: return s->drive;
-        case AMP_PARAM_TONE:  return s->tone;
-        case AMP_PARAM_LEVEL: return s->level;
-        case AMP_PARAM_BASS:  return s->bass;
-        case AMP_PARAM_NEVE:  return s->neve;
-        case AMP_PARAM_CAB:   return s->cab;
+        case AMP_PARAM_GAIN:   return s->gain;
+        case AMP_PARAM_BASS:   return s->bass;
+        case AMP_PARAM_MID:    return s->mid;
+        case AMP_PARAM_TREBLE: return s->treble;
+        case AMP_PARAM_MASTER: return s->master;
+        case AMP_PARAM_LEVEL:  return s->level;
     }
     return 0.0f;
 }
@@ -143,44 +222,66 @@ void Ampsim_process(Ampsim* a, float in, float* out) {
     AmpsimState* s = &a->s;
     int i;
 
-    /* 1. soft clip (drive): blend dry in with the clipped signal */
-    float d = s->drive;
-    float sc = clip3(in * s->clip_g);
-    float x = in * (1.0f - d) + sc * d;
+    /* 1. input stage: light asymmetric saturation (even + odd harmonics),
+     *    then a DC block (the x^2 term injects DC). */
+    float x = in * s->in_g;
+    float x2 = x * x;
+    x = x - 0.10f * x2 * x + 0.03f * x2;
+    {
+        float dy = x - s->dc_x1 + 0.995f * s->dc_y1;
+        s->dc_x1 = x;
+        s->dc_y1 = dy;
+        x = dy;
+    }
 
-    /* 2. Neve coloration: transformer-style even harmonics + 1073 EQ,
-     *      blended by neve amount */
-    float n = s->neve;
-    if (n > 0.0f) {
+    /* 2. gain stage with touch dynamics: the clip drive rides the input
+     *    envelope, so soft picks stay clean and hard picks break up. */
+    {
+        float ax = x < 0.0f ? -x : x;
+        float c = (ax > s->env) ? s->env_attack_c : s->env_release_c;
+        s->env += (ax - s->env) * c;
+        float drive = s->gain_drive * (0.55f + 0.65f * s->env);
+        x = clip3(x * drive);
+    }
+
+    /* 3. tone network (interacting bass/mid/treble) */
+    x = bq_run(&s->tone_bass, x);
+    x = bq_run(&s->tone_mid, x);
+    x = bq_run(&s->tone_treble, x);
+
+    /* 4. power stage: drive + sag (envelope dips gain on transients) */
+    {
+        float ax = x < 0.0f ? -x : x;
+        float c = (ax > s->sag_env) ? s->sag_attack_c : s->sag_release_c;
+        s->sag_env += (ax - s->sag_env) * c;
+        float sag = 1.0f - s->sag_amt * s->sag_env;
+        x = clip3(x * s->power_drive * sag);
+    }
+
+    /* 5. output transformer: Neve even harmonics + 1073 EQ (brand color) */
+    {
         float g = s->neve_g;
         float c1 = clip3(x * g);
         float c2 = clip3(x * g * 1.6f);
-        float sat = c1 + 0.15f * c2 * c2;          /* asymmetric (even harmonics) */
-        /* DC block (one-pole HPF ~30 Hz) */
-        float dcy = sat - s->dc_x1 + 0.995f * s->dc_y1;
-        s->dc_x1 = sat;
-        s->dc_y1 = dcy;
-        float tone = dcy;
-        for (i = 0; i < 3; ++i) tone = bq_run(&s->neve_bq[i], tone);
-        x = x * (1.0f - n) + tone * n;
+        float sat = c1 + 0.15f * c2 * c2;          /* asymmetric */
+        float dy = sat - s->tr_x1 + 0.995f * s->tr_y1;   /* DC block */
+        s->tr_x1 = sat;
+        s->tr_y1 = dy;
+        float y = dy;
+        for (i = 0; i < 3; ++i) y = bq_run(&s->neve_bq[i], y);
+        x = y * 0.9f;                              /* 1073 EQ level trim */
     }
 
-    /* 3. cabinet voicing: dark..bright chains, bass body, dry/wet blend */
-    float c = s->cab;
-    if (c > 0.0f) {
+    /* 6. speaker resonance + cabinet voicing */
+    x = bq_run(&s->reso_low, x);
+    x = bq_run(&s->reso_high, x);
+    {
         float dark = x, bright = x;
         for (i = 0; i < 4; ++i) dark = bq_run(&s->cab_dark[i], dark);
         for (i = 0; i < 4; ++i) bright = bq_run(&s->cab_bright[i], bright);
-        float t = s->tone;
-        float voiced = dark * (1.0f - t) + bright * t;   /* dark..bright */
-        float b = s->bass;
-        if (b > 0.0f) {
-            float body = bq_run(&s->bass_bq, voiced);
-            voiced = voiced * (1.0f - b) + body * b;
-        }
-        x = x * (1.0f - c) + voiced * c;
+        x = dark * (1.0f - s->cab_tone) + bright * s->cab_tone;
     }
 
-    /* 4. level */
+    /* 7. level */
     *out = x * s->level_gain;
 }

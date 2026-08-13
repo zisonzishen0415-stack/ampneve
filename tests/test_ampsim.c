@@ -11,12 +11,24 @@ static int failures = 0;
     else { printf("ok:   %s\n", msg); } \
 } while (0)
 
+static float run_rms(Ampsim* a, float freq, float amp, unsigned n, unsigned skip) {
+    float sum2 = 0.0f;
+    unsigned cnt = 0;
+    for (unsigned i = 0; i < n; ++i) {
+        float t = (float)i / 44100.0f;
+        float in = amp * sinf(2.0f * 3.14159265f * freq * t);
+        float o = 0.0f;
+        Ampsim_process(a, in, &o);
+        if (i >= skip) { sum2 += o * o; ++cnt; }
+    }
+    return cnt > 0u ? sqrtf(sum2 / (float)cnt) : 0.0f;
+}
+
 int main(void) {
     uint32_t need = Ampsim_state_size();
     printf("state_size = %u bytes\n", (unsigned)need);
     CHECK(need > 0 && need < 65536u, "state size sane");
 
-    /* alignment-safe scratch (float buffer) */
     size_t nf = (need + sizeof(float) - 1u) / sizeof(float);
     float* mem = (float*)calloc(nf, sizeof(float));
     CHECK(mem != NULL, "alloc scratch");
@@ -26,64 +38,66 @@ int main(void) {
     CHECK(a != NULL, "init ok");
 
     /* default params in range */
-    CHECK(Ampsim_get_param(a, AMP_PARAM_DRIVE) >= 0.0f && Ampsim_get_param(a, AMP_PARAM_DRIVE) <= 1.0f, "drive default in range");
+    {
+        int ok = 1;
+        int p;
+        for (p = 0; p < (int)AMPNEVE_NUM_PARAMS; ++p) {
+            float v = Ampsim_get_param(a, (AmpsimParam)p);
+            if (!(v >= 0.0f && v <= 1.0f)) ok = 0;
+        }
+        CHECK(ok, "all defaults in 0..1");
+    }
 
-    /* 1. unity passthrough: drive=0 neve=0 cab=0 level=0.5 -> gain 1.0 */
-    Ampsim_set_param(a, AMP_PARAM_DRIVE, 0.0f);
-    Ampsim_set_param(a, AMP_PARAM_NEVE, 0.0f);
-    Ampsim_set_param(a, AMP_PARAM_CAB, 0.0f);
-    Ampsim_set_param(a, AMP_PARAM_BASS, 0.0f);
-    Ampsim_set_param(a, AMP_PARAM_TONE, 0.5f);
-    Ampsim_set_param(a, AMP_PARAM_LEVEL, 0.5f);
+    /* 1. soft clip bounds: big input with full gain+master stays bounded */
+    Ampsim_set_param(a, AMP_PARAM_GAIN, 1.0f);
+    Ampsim_set_param(a, AMP_PARAM_MASTER, 1.0f);
+    Ampsim_set_param(a, AMP_PARAM_LEVEL, 0.0f);
     Ampsim_reset(a);
-    float o = 0.0f;
-    Ampsim_process(a, 0.3f, &o);
-    CHECK(fabsf(o - 0.3f) < 1e-4f, "unity passthrough (level=0.5, all off)");
-
-    /* 2. soft clip bounds: big input with full drive stays bounded */
-    Ampsim_set_param(a, AMP_PARAM_DRIVE, 1.0f);
-    Ampsim_set_param(a, AMP_PARAM_LEVEL, 0.0f);   /* gain 0.5 */
-    Ampsim_reset(a);
-    float peak = 0.0f;
+    float o = 0.0f, peak = 0.0f;
     for (int i = 0; i < 4096; ++i) {
         Ampsim_process(a, 8.0f, &o);
         if (fabsf(o) > peak) peak = fabsf(o);
     }
     CHECK(peak > 0.0f && peak < 1.0f, "soft clip bounded");
 
-    /* 3. no NaN/Inf over a long run with a sine */
-    Ampsim_set_param(a, AMP_PARAM_DRIVE, 0.7f);
-    Ampsim_set_param(a, AMP_PARAM_NEVE, 0.8f);
-    Ampsim_set_param(a, AMP_PARAM_CAB, 1.0f);
-    Ampsim_set_param(a, AMP_PARAM_TONE, 0.4f);
+    /* 2. no NaN/Inf over a long sine run */
+    Ampsim_set_param(a, AMP_PARAM_GAIN, 0.7f);
     Ampsim_set_param(a, AMP_PARAM_BASS, 0.6f);
+    Ampsim_set_param(a, AMP_PARAM_MID, 0.4f);
+    Ampsim_set_param(a, AMP_PARAM_TREBLE, 0.6f);
+    Ampsim_set_param(a, AMP_PARAM_MASTER, 0.7f);
     Ampsim_set_param(a, AMP_PARAM_LEVEL, 1.0f);
     Ampsim_reset(a);
-    int bad = 0;
-    double sum2 = 0.0;
-    unsigned cnt = 0;
-    for (unsigned i = 0; i < 200000u; ++i) {
-        float t = (float)i / 44100.0f;
-        float in = 0.5f * sinf(2.0f * 3.14159265f * 220.0f * t) + 0.25f * sinf(2.0f * 3.14159265f * 660.0f * t);
-        Ampsim_process(a, in, &o);
-        if (!(o == o) || o > 1e6f || o < -1e6f) { bad = 1; break; }
-        sum2 += (double)o * o;
-        ++cnt;
+    {
+        int bad = 0;
+        double sum2 = 0.0;
+        unsigned cnt = 0;
+        for (unsigned i = 0; i < 200000u; ++i) {
+            float t = (float)i / 44100.0f;
+            float in = 0.5f * sinf(2.0f * 3.14159265f * 220.0f * t)
+                     + 0.25f * sinf(2.0f * 3.14159265f * 660.0f * t);
+            Ampsim_process(a, in, &o);
+            if (!(o == o) || o > 1e6f || o < -1e6f) { bad = 1; break; }
+            sum2 += (double)o * o;
+            ++cnt;
+        }
+        CHECK(!bad, "stable, no NaN/Inf on sine run");
+        CHECK(cnt > 0u && sum2 > 0.0, "output has energy");
     }
-    CHECK(!bad, "stable, no NaN/Inf on sine run");
-    CHECK(cnt > 0u && sum2 > 0.0, "output has energy");
 
-    /* 4. param clamping */
-    Ampsim_set_param(a, AMP_PARAM_DRIVE, 5.0f);
-    CHECK(Ampsim_get_param(a, AMP_PARAM_DRIVE) == 1.0f, "clamps high");
-    Ampsim_set_param(a, AMP_PARAM_DRIVE, -1.0f);
-    CHECK(Ampsim_get_param(a, AMP_PARAM_DRIVE) == 0.0f, "clamps low");
+    /* 3. param clamping */
+    Ampsim_set_param(a, AMP_PARAM_GAIN, 5.0f);
+    CHECK(Ampsim_get_param(a, AMP_PARAM_GAIN) == 1.0f, "clamps high");
+    Ampsim_set_param(a, AMP_PARAM_GAIN, -1.0f);
+    CHECK(Ampsim_get_param(a, AMP_PARAM_GAIN) == 0.0f, "clamps low");
 
-    /* 5. reset clears filter state (output after reset from steady state) */
-    Ampsim_set_param(a, AMP_PARAM_DRIVE, 0.0f);
-    Ampsim_set_param(a, AMP_PARAM_NEVE, 1.0f);
-    Ampsim_set_param(a, AMP_PARAM_CAB, 1.0f);
-    Ampsim_set_param(a, AMP_PARAM_LEVEL, 0.5f);
+    /* 4. reset deterministic */
+    Ampsim_set_param(a, AMP_PARAM_GAIN, 0.5f);
+    Ampsim_set_param(a, AMP_PARAM_BASS, 0.5f);
+    Ampsim_set_param(a, AMP_PARAM_MID, 0.5f);
+    Ampsim_set_param(a, AMP_PARAM_TREBLE, 0.5f);
+    Ampsim_set_param(a, AMP_PARAM_MASTER, 0.5f);
+    Ampsim_set_param(a, AMP_PARAM_LEVEL, 0.8f);
     Ampsim_reset(a);
     Ampsim_process(a, 0.1f, &o);
     float after1 = o;
@@ -91,7 +105,69 @@ int main(void) {
     Ampsim_process(a, 0.1f, &o);
     CHECK(fabsf(o - after1) < 1e-5f, "reset deterministic");
 
-    /* 6. init rejects too-small buffer */
+    /* 5. tone network responds: bass boost vs cut at 80 Hz */
+    {
+        Ampsim_set_param(a, AMP_PARAM_GAIN, 0.4f);
+        Ampsim_set_param(a, AMP_PARAM_MID, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_TREBLE, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_MASTER, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_LEVEL, 0.8f);
+        Ampsim_set_param(a, AMP_PARAM_BASS, 1.0f);
+        Ampsim_reset(a);
+        float r_bass_hi = run_rms(a, 80.0f, 0.12f, 32768u, 16384u);
+        Ampsim_set_param(a, AMP_PARAM_BASS, 0.0f);
+        Ampsim_reset(a);
+        float r_bass_lo = run_rms(a, 80.0f, 0.12f, 32768u, 16384u);
+        CHECK(r_bass_hi > 1.15f * r_bass_lo, "bass knob boosts low end");
+    }
+
+    /* 6. tone network: treble boost vs cut at 5 kHz */
+    {
+        Ampsim_set_param(a, AMP_PARAM_BASS, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_MID, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_TREBLE, 1.0f);
+        Ampsim_reset(a);
+        float r_treb_hi = run_rms(a, 5000.0f, 0.06f, 32768u, 16384u);
+        Ampsim_set_param(a, AMP_PARAM_TREBLE, 0.0f);
+        Ampsim_reset(a);
+        float r_treb_lo = run_rms(a, 5000.0f, 0.06f, 32768u, 16384u);
+        CHECK(r_treb_hi > 1.15f * r_treb_lo, "treble knob boosts high end");
+    }
+
+    /* 7. level scales output */
+    {
+        Ampsim_set_param(a, AMP_PARAM_GAIN, 0.4f);
+        Ampsim_set_param(a, AMP_PARAM_BASS, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_MID, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_TREBLE, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_MASTER, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_LEVEL, 1.0f);
+        Ampsim_reset(a);
+        float r_lv_hi = run_rms(a, 220.0f, 0.15f, 16384u, 8192u);
+        Ampsim_set_param(a, AMP_PARAM_LEVEL, 0.0f);
+        Ampsim_reset(a);
+        float r_lv_lo = run_rms(a, 220.0f, 0.15f, 16384u, 8192u);
+        CHECK(r_lv_hi > 2.0f * r_lv_lo, "level scales output");
+    }
+
+    /* 8. dynamic compression: loud input compresses vs quiet input */
+    {
+        Ampsim_set_param(a, AMP_PARAM_GAIN, 0.8f);
+        Ampsim_set_param(a, AMP_PARAM_BASS, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_MID, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_TREBLE, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_MASTER, 0.8f);
+        Ampsim_set_param(a, AMP_PARAM_LEVEL, 0.8f);
+        Ampsim_reset(a);
+        float r_loud = run_rms(a, 220.0f, 0.50f, 32768u, 16384u);
+        Ampsim_reset(a);
+        float r_soft = run_rms(a, 220.0f, 0.15f, 32768u, 16384u);
+        float ratio = r_loud / (r_soft > 1e-6f ? r_soft : 1e-6f);
+        printf("    compression ratio loud/soft = %.3f\n", ratio);
+        CHECK(ratio > 1.2f && ratio < 2.9f, "loud input compresses (ratio < linear 3.33)");
+    }
+
+    /* 9. init rejects too-small buffer */
     CHECK(Ampsim_init(mem, need - 1u, 44100.0f) == NULL, "rejects small buffer");
 
     free(mem);

@@ -1,4 +1,4 @@
-﻿#include "PluginProcessor.h"
+#include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include <cmath>
 
@@ -27,12 +27,12 @@ public:
 };
 
 const char* AmpNeveAudioProcessorEditor::ids[2][3] = {
-    {"drive", "tone", "level"},
-    {"bass", "neve", "cab"}
+    {"gain", "bass", "mid"},
+    {"treble", "master", "level"}
 };
 const char* AmpNeveAudioProcessorEditor::names[2][3] = {
-    {"Drive", "Tone", "Level"},
-    {"Bass", "Neve", "Cab"}
+    {"Gain", "Bass", "Mid"},
+    {"Treble", "Master", "Level"}
 };
 
 static const juce::Colour lcdBg(0xff0d2239);     /* deep blue LCD backlight */

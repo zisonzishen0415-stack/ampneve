@@ -25,15 +25,31 @@ static const AmpBiquad AMP_CAB_BRIGHT[] = {
 };
 #define AMP_CAB_BRIGHT_N 4
 
-/* bass peaking */
-static const AmpBiquad AMP_BASS = { 1.007352396f, -1.974209618f, 0.967506619f, -1.974209618f, 0.974859015f };
+/* speaker resonance (fixed) */
+static const AmpBiquad AMP_RESO_LOW = { 1.002307559f, -1.991886554f, 0.989801908f, -1.991886554f, 0.992109467f };
+static const AmpBiquad AMP_RESO_HIGH = { 1.037707915f, -1.595895800f, 0.779482472f, -1.595895800f, 0.817190386f };
 
-/* neve 1073-style tone */
+/* neve 1073-style tone (fixed brand color) */
 static const AmpBiquad AMP_NEVE[] = {
     /* lf shelf 110 +2.5dB */ { 1.001597417f, -1.979340318f, 0.978023643f, -1.979375426f, 0.979585952f },
     /* mid 700 +1.5dB */ { 1.011544138f, -1.868187422f, 0.865973089f, -1.868187422f, 0.877517227f },
     /* hf shelf 12k +1dB */ { 1.054300169f, 0.136377579f, 0.184009450f, 0.196294617f, 0.178392582f },
 };
 #define AMP_NEVE_N 3
+
+/* tone network runtime constants (linear gain A, no pow at runtime) */
+#define AMP_TONE_BASS_F0 250.0f
+#define AMP_TONE_BASS_COSW 0.999365712f
+#define AMP_TONE_BASS_SINW 0.035611433f
+#define AMP_TONE_BASS_ALPHA 0.017805717f
+#define AMP_TONE_MID_F0 700.0f
+#define AMP_TONE_MID_COSW 0.995030775f
+#define AMP_TONE_MID_SINW 0.099567847f
+#define AMP_TONE_MID_ALPHA 0.062229904f
+#define AMP_TONE_TREB_F0 3000.0f
+#define AMP_TONE_TREB_COSW 0.910035111f
+#define AMP_TONE_TREB_SINW 0.414531177f
+#define AMP_TONE_TREB_ALPHA 0.207265588f
+#define AMP_TONE_TREB_HIGH 1
 
 #endif

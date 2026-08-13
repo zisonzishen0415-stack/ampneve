@@ -5,17 +5,25 @@ effect** (separate from the Reverson reverse reverb). It turns a DI /
 preamp guitar take into a "through a clean amp + 1x12 cab + Neve console"
 sound, and ships as a **VST3** plus a **Zoom G1on / MS-series ZDL**.
 
-Original DSP - no extracted factory algorithms:
+Original DSP - no extracted factory algorithms (boutique amp v1):
 
 ```
-in -> soft clip (Drive)
-   -> Neve coloration (transformer even harmonics + 1073-style EQ) [Neve]
-   -> cabinet voicing (HP/body/presence/LP, dark..bright) [Tone]
-   -> low-mid body [Bass]
-   -> level [Level]
+in -> input stage            light asymmetric saturation, DC block
+   -> gain stage             touch dynamics: clip drive rides the input
+                              envelope (soft picks stay clean, hard picks
+                              break up)                     [Gain]
+   -> tone network           interacting bass/mid/treble peaking
+                              (fixed centers, linear-gain coeffs) [Bass/Mid/Treble]
+   -> power stage            softer saturation + sag (envelope-driven
+                              gain dip on transients)       [Master]
+   -> transformer            Neve-style even harmonics + 1073-style EQ
+                              + DC block (fixed brand color)
+   -> speaker                cabinet resonance (105 Hz + 3.5 kHz) + cab
+                              dark..bright voicing (fixed blend)
+   -> level                                                  [Level]
 ```
 
-The Neve coloration is placed **before** the cab by default: the cab's high
+The Neve coloration is placed **before** the cab by design: the cab's high
 rolloff tames the saturation harmonics so they never sound harsh (A/B'd
 against post-cab placement in the reverson demo work).
 
@@ -33,13 +41,18 @@ independent means:
   `sinf/cosf/powf/logf`, no division, no large writable statics. All filter
   coefficients are precomputed constants (`core/ampsim_coeffs.h`, generated
   by `tools/gen_coeffs.py`), so the audio path is pure multiply-add.
-- **6 knobs, two pages x 3** (pedal style): P1 Drive/Tone/Level,
-  P2 Bass/Neve/Cab.
-- **Cabinet voicing**: fixed filter bank (90 Hz HP, 180 Hz body, 3.2 kHz
-  presence, 7-9 kHz rolloff) with dark..bright interpolation - no runtime
-  coefficient math.
-- **Neve coloration**: asymmetric saturation (even harmonics) + 1073-style
-  EQ (110 Hz shelf, 700 Hz mid, 12 kHz shelf) + DC block.
+- **6 knobs, two pages x 3** (pedal style): P1 Gain/Bass/Mid,
+  P2 Treble/Master/Level.
+- **Touch dynamics**: the gain stage's clip drive rides the input envelope,
+  so soft picks stay clean and hard picks break up - a real amp responds
+  to the hand, not a fixed transfer curve.
+- **Power sag**: envelope-driven gain dip on transients (1 ms attack /
+  200 ms release) gives the low-end "give" of a tube power amp.
+- **Cabinet voicing**: speaker resonance (105 Hz + 3.5 kHz) plus a fixed
+  filter bank (90 Hz HP, 180 Hz body, 3.2 kHz presence, 7-9 kHz rolloff) -
+  no runtime coefficient math.
+- **Neve coloration (fixed)**: asymmetric saturation (even harmonics) +
+  1073-style EQ (110 Hz shelf, 700 Hz mid, 12 kHz shelf) + DC block.
 
 ## Build
 
@@ -57,7 +70,7 @@ ctest --test-dir build
 - `test_ampsim` - numeric behavior + stability
 - `tools/check_zdl_safe.py` - static ZDL-safety audit of the core
 - `tools/ampsim_render` - offline renderer (same code path as VST/ZDL):
-  `ampsim_render in.wav out.wav [drive] [tone] [level] [bass] [neve] [cab]`
+  `ampsim_render in.wav out.wav [gain] [bass] [mid] [treble] [master] [level]`
 - VST3: `build/vst/AmpNeveVST_artefacts/Release/VST3/AmpNeve.vst3`
 
 ## ZDL
