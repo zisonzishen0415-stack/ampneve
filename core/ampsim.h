@@ -8,6 +8,7 @@
  *   -> power stage (softer clip + sag compression)
  *   -> output transformer (Neve even harmonics + 1073 EQ, brand color)
  *   -> speaker resonance + cabinet voicing (dark..bright)
+ *   -> mic pickup (SM57-style, fixed)
  *   -> level
  *
  * ZDL-safe: no heap (caller memory), no double, no sinf/cosf/powf/logf,

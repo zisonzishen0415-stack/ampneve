@@ -47,8 +47,8 @@ AMP_CODE_SECTION(AMP_DRV_AUDIO_FUNC)
 #define AMP_RAW_TO_NORM 7.1428571f
 
 /* one Ampsim instance per channel; state float count is fixed generously
-   (Ampsim_state_size() is ~600 bytes < 160 floats = 640 bytes). */
-#define AMP_STATE_FLOATS 160u
+   (Ampsim_state_size() is 696 bytes < 184 floats = 736 bytes). */
+#define AMP_STATE_FLOATS 184u
 
 typedef struct AmpZdlState {
     uint32_t magic;

@@ -20,7 +20,10 @@ in -> input trim             level matching for any DI / loop take [Input]
    -> transformer            Neve-style even harmonics + 1073-style EQ
                               + DC block (fixed brand color)
    -> speaker                cabinet resonance (105 Hz + 3.5 kHz) + cab
-                              dark..bright voicing (fixed blend)
+                              dark..bright voicing (fixed blend)  [Cab]
+   -> mic                    SM57-style pickup (mic HP, 5.8 kHz presence
+                              bite, steep top rolloff) - the link that
+                              makes it read as a miked cab
    -> level                                                  [Level]
 ```
 
@@ -34,7 +37,7 @@ The amp/cabinet is a signal-chain stage, not a reverb module. Keeping it
 independent means:
 - it can sit before Reverson (or any reverb/delay) in the pedal chain or DAW;
 - the VST and ZDL package separately;
-- the DSP stays tiny (612 bytes of state) and trivially ZDL-safe.
+- the DSP stays tiny (696 bytes of state) and trivially ZDL-safe.
 
 ## Features
 
@@ -58,9 +61,11 @@ independent means:
   to the hand, not a fixed transfer curve.
 - **Power sag**: envelope-driven gain dip on transients (1 ms attack /
   200 ms release) gives the low-end "give" of a tube power amp.
-- **Cabinet voicing**: speaker resonance (105 Hz + 3.5 kHz) plus a fixed
-  filter bank (90 Hz HP, 180 Hz body, 3.2 kHz presence, 7-9 kHz rolloff) -
-  no runtime coefficient math.
+- **Cabinet + mic**: speaker resonance (105 Hz + 3.5 kHz), a cab voicing
+  chain (95 Hz HP, 220 Hz body, 550 Hz de-honk, 4.2-5.5 kHz cone presence,
+  steep 4th-order LP) and a fixed SM57-style mic pickup (70 Hz HP,
+  5.8 kHz presence bite, 11 kHz rolloff) - the full head + cab + mic read.
+  All coefficients are precomputed constants, no runtime math.
 - **Neve coloration (knob)**: asymmetric saturation (even harmonics) +
   1073-style EQ (110 Hz shelf, 700 Hz mid, 12 kHz shelf) + DC block, blended
   wet/dry by the Neve knob (0 = bypass).

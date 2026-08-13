@@ -41,6 +41,7 @@ typedef struct {
     Bq reso_low, reso_high;
     Bq cab_dark[AMP_CAB_DARK_N];
     Bq cab_bright[AMP_CAB_BRIGHT_N];
+    Bq mic[AMP_MIC_N];          /* SM57-style mic pickup (fixed) */
     float cab_tone;             /* dark..bright blend (0..1) */
     float presence;             /* speaker 3.5kHz resonance amount, 0..1 */
 
@@ -123,6 +124,7 @@ static void update_stage_coeffs(Ampsim* a) {
     for (i = 0; i < AMP_CAB_BRIGHT_N; ++i) bq_load(&s->cab_bright[i], &AMP_CAB_BRIGHT[i]);
     bq_load(&s->reso_low, &AMP_RESO_LOW);
     bq_load(&s->reso_high, &AMP_RESO_HIGH);
+    for (i = 0; i < AMP_MIC_N; ++i) bq_load(&s->mic[i], &AMP_MIC[i]);
     tone_peaking(&s->tone_bass,   AMP_TONE_BASS_COSW,   AMP_TONE_BASS_ALPHA,   1.0f);
     tone_peaking(&s->tone_mid,    AMP_TONE_MID_COSW,    AMP_TONE_MID_ALPHA,    1.0f);
     tone_peaking(&s->tone_treble, AMP_TONE_TREB_COSW,   AMP_TONE_TREB_ALPHA,   1.0f);
@@ -137,6 +139,7 @@ void Ampsim_reset(Ampsim* a) {
     for (i = 0; i < AMP_CAB_BRIGHT_N; ++i) { s->cab_bright[i].v1 = s->cab_bright[i].v2 = 0.0f; }
     s->reso_low.v1 = s->reso_low.v2 = 0.0f;
     s->reso_high.v1 = s->reso_high.v2 = 0.0f;
+    for (i = 0; i < AMP_MIC_N; ++i) { s->mic[i].v1 = s->mic[i].v2 = 0.0f; }
     s->tone_bass.v1 = s->tone_bass.v2 = 0.0f;
     s->tone_mid.v1 = s->tone_mid.v2 = 0.0f;
     s->tone_treble.v1 = s->tone_treble.v2 = 0.0f;
@@ -311,11 +314,15 @@ void Ampsim_process(Ampsim* a, float in, float* out) {
     }
     {
         float dark = x, bright = x;
-        for (i = 0; i < 4; ++i) dark = bq_run(&s->cab_dark[i], dark);
-        for (i = 0; i < 4; ++i) bright = bq_run(&s->cab_bright[i], bright);
+        for (i = 0; i < AMP_CAB_DARK_N; ++i) dark = bq_run(&s->cab_dark[i], dark);
+        for (i = 0; i < AMP_CAB_BRIGHT_N; ++i) bright = bq_run(&s->cab_bright[i], bright);
         x = dark * (1.0f - s->cab_tone) + bright * s->cab_tone;
     }
 
-    /* 7. level */
+    /* 7. mic pickup (SM57-ish, fixed): the last link that makes it read
+     * as a miked cab instead of an EQ'd DI. */
+    for (i = 0; i < AMP_MIC_N; ++i) x = bq_run(&s->mic[i], x);
+
+    /* 8. level */
     *out = x * s->level_gain;
 }

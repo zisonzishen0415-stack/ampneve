@@ -40,23 +40,28 @@ C.append('#ifndef AMPNEVE_COEFFS_H\n#define AMPNEVE_COEFFS_H\n\n')
 C.append('#define AMPNEVE_COEFFS_FS 44100.0f\n')
 C.append('typedef struct { float b0, b1, b2, a1, a2; } AmpBiquad;\n\n')
 
-# --- cab DARK (TONE=0): HP90 + body180(+1.5) + pres3200(Q1.2,+1.5) + LP10000(4th)
-#     Nashville session voice: tight lows, no honk, glassy top. ---
-hp90 = butter(FS, 90.0, 2, 'highpass')[0]
-body = peaking(FS, 180.0, 1.0, 1.5)
-pres_dark = peaking(FS, 3200.0, 1.2, 1.5)
-lp_dark = butter(FS, 10000.0, 4, 'lowpass')
-C.append('/* cab DARK chain (TONE=0) */\n')
+# --- cab chains (speaker + enclosure, TONE knob dark..bright): HP95 + body220(+3) +
+#     midcut550(-2) + presence + 4th-order LP. Every section in the chain is
+#     processed (all 5 biquads) - a 4th-order LP is two biquads whose mid-band
+#     gains cancel, so dropping one nulls the whole chain. ---
+hp95 = butter(FS, 95.0, 2, 'highpass')[0]
+body = peaking(FS, 220.0, 1.0, 3.0)
+midcut = peaking(FS, 550.0, 1.2, -2.0)
+pres_dark = peaking(FS, 4200.0, 1.1, 4.5)
+lp_dark = butter(FS, 9500.0, 4, 'lowpass')
+C.append('/* cab DARK chain (TONE=0): woody 1x12, tighter/papery */\n')
 C.append('static const AmpBiquad AMP_CAB_DARK[] = {\n')
-C.append(fmt('hp90', hp90)); C.append(fmt('body180 +1.5dB', body)); C.append(fmt('pres3200 +1.5dB', pres_dark))
-for i,b in enumerate(lp_dark): C.append(fmt(f'lp10000 4th #{i}', b))
+C.append(fmt('hp95', hp95)); C.append(fmt('body220 +3dB', body)); C.append(fmt('midcut550 -2dB', midcut))
+C.append(fmt('pres4200 +4.5dB', pres_dark))
+for i,b in enumerate(lp_dark): C.append(fmt(f'lp9500 4th #{i}', b))
 C.append('};\n#define AMP_CAB_DARK_N 5\n\n')
 
-pres_bright = peaking(FS, 3200.0, 1.2, 3.0)
+pres_bright = peaking(FS, 5500.0, 1.1, 6.0)
 lp_bright = butter(FS, 12000.0, 4, 'lowpass')
-C.append('/* cab BRIGHT chain (TONE=1) */\n')
+C.append('/* cab BRIGHT chain (TONE=1): glassier cone edge */\n')
 C.append('static const AmpBiquad AMP_CAB_BRIGHT[] = {\n')
-C.append(fmt('hp90', hp90)); C.append(fmt('body180 +1.5dB', body)); C.append(fmt('pres3200 +3dB', pres_bright))
+C.append(fmt('hp95', hp95)); C.append(fmt('body220 +3dB', body)); C.append(fmt('midcut550 -2dB', midcut))
+C.append(fmt('pres5500 +6dB', pres_bright))
 for i,b in enumerate(lp_bright): C.append(fmt(f'lp12000 4th #{i}', b))
 C.append('};\n#define AMP_CAB_BRIGHT_N 5\n\n')
 
@@ -64,6 +69,17 @@ C.append('};\n#define AMP_CAB_BRIGHT_N 5\n\n')
 #     Nashville: tighter lows, less cone ring. ---
 reso_low = peaking(FS, 105.0, 1.2, 2.5)
 reso_hi = peaking(FS, 3500.0, 1.6, 2.0)
+
+# --- mic pickup (fixed, after cab): SM57-on-1x12 character - mic HP,
+#     presence bite at 5.8kHz, steep top rolloff. This is the "?????"
+#     stage: without it the amp reads as EQ'd DI, not a miked cab. ---
+mic_hp = butter(FS, 70.0, 2, 'highpass')[0]
+mic_pres = peaking(FS, 5800.0, 1.0, 3.0)
+mic_lp = butter(FS, 11000.0, 2, 'lowpass')[0]
+C.append('/* mic pickup (SM57-ish, fixed after cab) */\n')
+C.append('static const AmpBiquad AMP_MIC[] = {\n')
+C.append(fmt('hp70', mic_hp)); C.append(fmt('pres5800 +3dB', mic_pres)); C.append(fmt('lp11000 2nd', mic_lp))
+C.append('};\n#define AMP_MIC_N 3\n\n')
 C.append('/* speaker resonance (fixed) */\n')
 C.append('static const AmpBiquad AMP_RESO_LOW = ')
 C.append('{ ' + ', '.join(f'{v:.9f}f' for v in reso_low) + ' };\n')
