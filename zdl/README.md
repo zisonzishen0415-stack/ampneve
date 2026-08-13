@@ -4,7 +4,9 @@ Custom AMP-category effect for the Zoom G1on / MS-series (ZDL). Original
 boutique-amp DSP: input trim (fixed) -> input stage -> gain stage with
 touch dynamics -> tone network -> power stage with sag -> Neve transformer
 + 1073-style EQ -> speaker resonance + cabinet + SM57-style mic pickup ->
-level. Nine knobs across three LineSel pages (mirrors the VST):
+level. Nine knobs + a Voice switch across the LineSel pages (mirrors the
+VST). Voice toggles Nashville (session sheen) vs Emo/Edge (earlier breakup,
+more mid body, warmer top):
 
 | Page | Knob | Param | Range | Maps to |
 |---|---|---|---|---|
@@ -17,6 +19,7 @@ level. Nine knobs across three LineSel pages (mirrors the VST):
 | P3 | 1 | Neve | 0..1 | coloration wet/dry (0 = bypass) |
 | P3 | 2 | Cab | 0..1 | cabinet dark(0)..bright(1) |
 | P3 | 3 | Presence | 0..1 | speaker 3.5 kHz resonance |
+| V  | 1 | Voice | 0/1 | switch: 0 = Nashville, 1 = Emo/Edge |
 
 Input trim is fixed at 1.0 (the calibrated reference) and takes no knob:
 the pedal's hardware INPUT VOL does the level matching before the DSP,

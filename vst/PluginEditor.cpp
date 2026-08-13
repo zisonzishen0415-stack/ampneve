@@ -58,6 +58,11 @@ AmpNeveAudioProcessorEditor::AmpNeveAudioProcessorEditor(AmpNeveAudioProcessor& 
     bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         processor.apvts, "bypass", bypassButton);
 
+    voiceButton.setButtonText("VOICE");
+    addAndMakeVisible(voiceButton);
+    voiceAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        processor.apvts, "voice", voiceButton);
+
     for (int i = 0; i < 3; ++i) {
         knobs[i].setSliderStyle(juce::Slider::RotaryVerticalDrag);
         knobs[i].setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
@@ -148,8 +153,12 @@ void AmpNeveAudioProcessorEditor::paint(juce::Graphics& g) {
     g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 15.0f, juce::Font::bold));
     g.drawText("AMPNEVE", header.removeFromLeft(180), juce::Justification::centredLeft, false);
     g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 13.0f, juce::Font::bold));
-    g.drawText(juce::String("P") + juce::String(currentPage + 1), header,
+    auto pageArea = header.removeFromRight(42);
+    g.drawText(juce::String("P") + juce::String(currentPage + 1), pageArea,
                juce::Justification::centredRight, false);
+    auto* pVoice = processor.apvts.getRawParameterValue("voice");
+    bool emo = pVoice != nullptr && pVoice->load() > 0.5f;
+    g.drawText(emo ? "EMO" : "NASHVILLE", header, juce::Justification::centredRight, false);
 
     /* input level meter: label + horizontal bar (raw input peak) + dB text */
     {
@@ -237,6 +246,7 @@ void AmpNeveAudioProcessorEditor::resized() {
     auto area = getLocalBounds();
     bypassButton.setBounds(16, area.getHeight() - 34, 84, 24);
     pageButton.setBounds(108, area.getHeight() - 34, 84, 24);
+    voiceButton.setBounds(200, area.getHeight() - 34, 84, 24);
 }
 
 void AmpNeveAudioProcessorEditor::timerCallback() {

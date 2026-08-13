@@ -242,7 +242,25 @@ int main(void) {
         CHECK(fabsf(Ampsim_input_gain(0.0f) - 0.125f) < 1e-6f, "input gain floor = 0.125");
     }
 
-    /* 13. init rejects too-small buffer */
+    /* 13. voice switch: Emo/Edge raises the gain base (earlier breakup) */
+    {
+        Ampsim_set_param(a, AMP_PARAM_GAIN, 0.30f);
+        Ampsim_set_param(a, AMP_PARAM_BASS, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_MID, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_TREBLE, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_MASTER, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_LEVEL, 0.8f);
+        Ampsim_set_param(a, AMP_PARAM_VOICE, 0.0f);
+        Ampsim_reset(a);
+        float r_nash = run_rms(a, 220.0f, 0.25f, 32768u, 16384u);
+        Ampsim_set_param(a, AMP_PARAM_VOICE, 1.0f);
+        Ampsim_reset(a);
+        float r_emo = run_rms(a, 220.0f, 0.25f, 32768u, 16384u);
+        CHECK(r_emo > 1.02f * r_nash, "Emo/Edge voice breaks up earlier (higher gain base)");
+        CHECK(Ampsim_get_param(a, AMP_PARAM_VOICE) == 1.0f, "voice param round-trip");
+    }
+
+    /* 14. init rejects too-small buffer */
     CHECK(Ampsim_init(mem, need - 1u, 44100.0f) == NULL, "rejects small buffer");
 
     free(mem);

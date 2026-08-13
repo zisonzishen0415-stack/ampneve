@@ -8,9 +8,9 @@
  *   - block processing: 8 samples L + 8 samples R, channel-interleaved
  *   - ctx[11]/ctx[12] magic shuttle preserved
  *
- * Nine knobs across three LineSel pages (mirrors the VST):
- *   P1: Bass / Mid / Treble,  P2: Gain / Master / Level,
- *   P3: Neve / Cab / Presence.
+ * Nine knobs across three LineSel pages plus a Voice switch (mirrors the
+ * VST): P1: Bass / Mid / Treble,  P2: Gain / Master / Level,
+ * P3: Neve / Cab / Presence,  Voice: Nashville / Emo-Edge switch.
  *
  * Input trim is fixed at 1.0 (the calibrated reference) and takes no knob:
  * the pedal's hardware INPUT VOL sits before the DSP and does the level
@@ -145,6 +145,7 @@ void AMP_DRV_AUDIO_FUNC(unsigned int *ctx)
     float neve     = amp_param_norm(params[AMPNEVE_NEVE_SLOT],     AMPNEVE_NEVE_DEFAULT_NORM);
     float cab      = amp_param_norm(params[AMPNEVE_CAB_SLOT],      AMPNEVE_CAB_DEFAULT_NORM);
     float presence = amp_param_norm(params[AMPNEVE_PRESENCE_SLOT], AMPNEVE_PRESENCE_DEFAULT_NORM);
+    float voice    = amp_param_norm(params[AMPNEVE_VOICE_SLOT],    AMPNEVE_VOICE_DEFAULT_NORM);
 
     Ampsim *aL = (Ampsim *)&st->memL;
     Ampsim *aR = (Ampsim *)&st->memR;
@@ -166,6 +167,8 @@ void AMP_DRV_AUDIO_FUNC(unsigned int *ctx)
     Ampsim_set_param(aR, AMP_PARAM_NEVE,     neve);
     Ampsim_set_param(aR, AMP_PARAM_CAB,      cab);
     Ampsim_set_param(aR, AMP_PARAM_PRESENCE, presence);
+    Ampsim_set_param(aL, AMP_PARAM_VOICE, voice);
+    Ampsim_set_param(aR, AMP_PARAM_VOICE, voice);
 
     int i;
     for (i = 0; i < 8; i++) {

@@ -11,6 +11,8 @@ typedef struct {
     /* params */
     float input;               /* input trim, 0..1 (1.0 = calibrated ref) */
     float gain, bass, mid, treble, master, level;
+    float voice;               /* 0 = Nashville, 1 = Emo/Edge */
+    float gain_base;           /* voice-dependent gain-stage base */
     float sample_rate;
 
     /* input stage */
@@ -116,15 +118,28 @@ static void tone_peaking(Bq* b, float cosw, float alpha, float A) {
     b->v1 = b->v2 = 0.0f;
 }
 
-static void update_stage_coeffs(Ampsim* a) {
+/* Reload the voice-dependent fixed stages (Neve EQ, cab voicing, mic
+ * pickup). Tone-network coefficients are NOT touched - they follow the
+ * Bass/Mid/Treble knobs and must survive a voice switch. */
+static void update_voice_coeffs(Ampsim* a) {
     AmpsimState* s = &a->s;
     int i;
-    for (i = 0; i < 3; ++i) bq_load(&s->neve_bq[i], &AMP_NEVE[i]);
-    for (i = 0; i < AMP_CAB_DARK_N; ++i) bq_load(&s->cab_dark[i], &AMP_CAB_DARK[i]);
-    for (i = 0; i < AMP_CAB_BRIGHT_N; ++i) bq_load(&s->cab_bright[i], &AMP_CAB_BRIGHT[i]);
+    int emo = s->voice >= 0.5f ? 1 : 0;
+    for (i = 0; i < AMP_NEVE_N; ++i)
+        bq_load(&s->neve_bq[i], emo ? &AMP_NEVE_EMO[i] : &AMP_NEVE[i]);
+    for (i = 0; i < AMP_CAB_DARK_N; ++i)
+        bq_load(&s->cab_dark[i], emo ? &AMP_CAB_DARK_EMO[i] : &AMP_CAB_DARK[i]);
+    for (i = 0; i < AMP_CAB_BRIGHT_N; ++i)
+        bq_load(&s->cab_bright[i], emo ? &AMP_CAB_BRIGHT_EMO[i] : &AMP_CAB_BRIGHT[i]);
     bq_load(&s->reso_low, &AMP_RESO_LOW);
     bq_load(&s->reso_high, &AMP_RESO_HIGH);
-    for (i = 0; i < AMP_MIC_N; ++i) bq_load(&s->mic[i], &AMP_MIC[i]);
+    for (i = 0; i < AMP_MIC_N; ++i)
+        bq_load(&s->mic[i], emo ? &AMP_MIC_EMO[i] : &AMP_MIC[i]);
+}
+
+static void update_stage_coeffs(Ampsim* a) {
+    AmpsimState* s = &a->s;
+    update_voice_coeffs(a);
     tone_peaking(&s->tone_bass,   AMP_TONE_BASS_COSW,   AMP_TONE_BASS_ALPHA,   1.0f);
     tone_peaking(&s->tone_mid,    AMP_TONE_MID_COSW,    AMP_TONE_MID_ALPHA,    1.0f);
     tone_peaking(&s->tone_treble, AMP_TONE_TREB_COSW,   AMP_TONE_TREB_ALPHA,   1.0f);
@@ -157,6 +172,8 @@ Ampsim* Ampsim_init(void* mem, uint32_t bytes, float sample_rate) {
     s->sample_rate = sample_rate;
 
     s->input = 1.0f;
+    s->voice = 0.0f;
+    s->gain_base = 0.2f;
     s->gain = 0.45f;
     s->bass = s->mid = s->treble = 0.50f;
     s->master = 0.50f;
@@ -166,7 +183,7 @@ Ampsim* Ampsim_init(void* mem, uint32_t bytes, float sample_rate) {
     s->presence = 1.0f;
 
     s->in_g = Ampsim_input_gain(s->input);
-    s->gain_drive = 0.2f + 2.6f * s->gain;
+    s->gain_drive = s->gain_base + 2.6f * s->gain;
     s->power_drive = 0.5f + 1.3f * s->master;
     s->sag_amt = 0.30f * s->master;
     s->neve_g = 1.9f;
@@ -195,7 +212,13 @@ void Ampsim_set_param(Ampsim* a, AmpsimParam p, float v) {
             break;
         case AMP_PARAM_GAIN:
             s->gain = v;
-            s->gain_drive = 0.2f + 2.6f * v;
+            s->gain_drive = s->gain_base + 2.6f * v;
+            break;
+        case AMP_PARAM_VOICE:
+            s->voice = (v >= 0.5f) ? 1.0f : 0.0f;
+            s->gain_base = (v >= 0.5f) ? 0.35f : 0.2f;
+            s->gain_drive = s->gain_base + 2.6f * s->gain;
+            update_voice_coeffs(a);
             break;
         case AMP_PARAM_BASS:
             s->bass = v;
@@ -244,6 +267,7 @@ float Ampsim_get_param(const Ampsim* a, AmpsimParam p) {
         case AMP_PARAM_NEVE:    return s->neve;
         case AMP_PARAM_CAB:     return s->cab_tone;
         case AMP_PARAM_PRESENCE: return s->presence;
+        case AMP_PARAM_VOICE:   return s->voice;
     }
     return 0.0f;
 }

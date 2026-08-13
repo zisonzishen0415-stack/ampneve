@@ -53,6 +53,10 @@ independent means:
   level meter** in the VST LCD (green/yellow/red vs the -12..-6 dBFS DI target).
   The ZDL fixes Input at 1.0 - the pedal's hardware INPUT VOL does the level
   matching before the DSP, exactly like plugging into a tube amp.
+- **Two voices (switch)**: Nashville (clean session sheen) and Emo/Edge
+  (earlier breakup, more 400-800 Hz body, warmer top, less Neve sheen).
+  VST = VOICE button + LCD indicator; ZDL = a switch param (footswitch CTRL
+  assignment is host-side and hardware-unverified).
 - **Input trim**: 0..1 maps to 0.125x..1.25x input gain, with 1.0 = the
   calibrated reference (the historical fixed 1.25x). Set it once per take so
   every source hits the amp the same way.
@@ -88,7 +92,7 @@ ctest --test-dir build
 - `tools/di_level_check.py` - level-check a recorded DI take (peak/rms/clipping):
   python tools/di_level_check.py take.wav  (target peak -12..-6 dBFS, rms -20..-16 dBFS)
 - `tools/ampsim_render` - offline renderer (same code path as VST/ZDL):
-  `ampsim_render in.wav out.wav [input] [gain] [bass] [mid] [treble] [master] [level] [neve] [cab] [presence]`
+  `ampsim_render in.wav out.wav [input] [gain] [bass] [mid] [treble] [master] [level] [neve] [cab] [presence] [voice]`
 - VST3: `build/vst/AmpNeveVST_artefacts/Release/VST3/AmpNeve.vst3`
 
 ## ZDL

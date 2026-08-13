@@ -36,9 +36,11 @@ private:
     juce::Slider inputKnob;
     juce::TextButton pageButton{"PAGE"};
     juce::TextButton bypassButton{"BYPASS"};
+    juce::TextButton voiceButton{"VOICE"};
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachments[3];
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> inputAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> voiceAttachment;
     std::unique_ptr<juce::LookAndFeel> knobLaf;
     int currentPage = 0;
 

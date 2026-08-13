@@ -11,6 +11,10 @@
  *   -> mic pickup (SM57-style, fixed)
  *   -> level
  *
+ * Voice switch (0 = Nashville session, 1 = Emo/Edge): swaps the Neve EQ,
+ * cab voicing and mic character, and raises the gain-stage base so edge
+ * breakup arrives earlier - one pedal-style toggle, no IRs.
+ *
  * ZDL-safe: no heap (caller memory), no double, no sinf/cosf/powf/logf,
  * no division in the audio path, no large writable statics. Filter
  * coefficients are precomputed constants or updated at set_param time with
@@ -25,7 +29,7 @@
 extern "C" {
 #endif
 
-#define AMPNEVE_NUM_PARAMS 10u
+#define AMPNEVE_NUM_PARAMS 11u
 
 typedef enum {
     AMP_PARAM_INPUT = 0,  /* input trim, 0..1 (1.0 = calibrated ref) */
@@ -37,7 +41,8 @@ typedef enum {
     AMP_PARAM_LEVEL,       /* output level, 0..1 (0.5..1.5 gain) */
     AMP_PARAM_NEVE,        /* Neve coloration amount, 0..1 (0 = bypass) */
     AMP_PARAM_CAB,         /* cabinet voicing, 0..1 (0 = dark, 1 = bright) */
-    AMP_PARAM_PRESENCE     /* speaker 3.5kHz resonance amount, 0..1 */
+    AMP_PARAM_PRESENCE,    /* speaker 3.5kHz resonance amount, 0..1 */
+    AMP_PARAM_VOICE        /* voice: 0 = Nashville, 1 = Emo/Edge */
 } AmpsimParam;
 
 /* Maps the 0..1 Input knob to a linear input gain: 0.125x..1.25x,

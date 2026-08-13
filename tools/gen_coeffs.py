@@ -80,6 +80,45 @@ C.append('/* mic pickup (SM57-ish, fixed after cab) */\n')
 C.append('static const AmpBiquad AMP_MIC[] = {\n')
 C.append(fmt('hp70', mic_hp)); C.append(fmt('pres5800 +3dB', mic_pres)); C.append(fmt('lp11000 2nd', mic_lp))
 C.append('};\n#define AMP_MIC_N 3\n\n')
+# --- EMO / EDGE voice (VOICE=1): midwest-emo / math-rock / post-punk platform.
+#     Same head, but: earlier breakup (handled in core via gain base), more
+#     400-800 Hz body (no de-honk), warmer SM57 top, less Neve sheen. ---
+neve_emo_lf = shelf(FS, 110.0, 1.5, False)
+neve_emo_mid = peaking(FS, 700.0, 0.7, 1.0)
+neve_emo_hf = shelf(FS, 12000.0, 0.5, True)
+C.append('/* neve EMO (VOICE=1): less HF sheen */\n')
+C.append('static const AmpBiquad AMP_NEVE_EMO[] = {\n')
+C.append(fmt('lf shelf 110 +1.5dB', neve_emo_lf)); C.append(fmt('mid 700 +1dB', neve_emo_mid)); C.append(fmt('hf shelf 12k +0.5dB', neve_emo_hf))
+C.append('};\n#define AMP_NEVE_EMO_N 3\n\n')
+
+hp_emo = butter(FS, 95.0, 2, 'highpass')[0]
+body_emo = peaking(FS, 220.0, 1.0, 3.0)
+body500 = peaking(FS, 500.0, 1.0, 1.5)   # 400-800 body instead of de-honk
+pres_dark_emo = peaking(FS, 3800.0, 1.1, 4.0)
+lp_dark_emo = butter(FS, 9000.0, 4, 'lowpass')
+C.append('/* cab DARK EMO (VOICE=1): woody, mid-forward, warmer top */\n')
+C.append('static const AmpBiquad AMP_CAB_DARK_EMO[] = {\n')
+C.append(fmt('hp95', hp_emo)); C.append(fmt('body220 +3dB', body_emo)); C.append(fmt('body500 +1.5dB', body500))
+C.append(fmt('pres3800 +4dB', pres_dark_emo))
+for i,b in enumerate(lp_dark_emo): C.append(fmt(f'lp9000 4th #{i}', b))
+C.append('};\n#define AMP_CAB_DARK_EMO_N 5\n\n')
+
+pres_bright_emo = peaking(FS, 4800.0, 1.1, 5.0)
+lp_bright_emo = butter(FS, 11000.0, 4, 'lowpass')
+C.append('/* cab BRIGHT EMO (VOICE=1): glassier cone edge */\n')
+C.append('static const AmpBiquad AMP_CAB_BRIGHT_EMO[] = {\n')
+C.append(fmt('hp95', hp_emo)); C.append(fmt('body220 +3dB', body_emo)); C.append(fmt('body500 +1.5dB', body500))
+C.append(fmt('pres4800 +5dB', pres_bright_emo))
+for i,b in enumerate(lp_bright_emo): C.append(fmt(f'lp11000 4th #{i}', b))
+C.append('};\n#define AMP_CAB_BRIGHT_EMO_N 5\n\n')
+
+mic_emo_hp = butter(FS, 70.0, 2, 'highpass')[0]
+mic_emo_pres = peaking(FS, 5500.0, 1.0, 2.0)
+mic_emo_lp = butter(FS, 10000.0, 2, 'lowpass')[0]
+C.append('/* mic EMO (VOICE=1): a touch less bite, warmer */\n')
+C.append('static const AmpBiquad AMP_MIC_EMO[] = {\n')
+C.append(fmt('hp70', mic_emo_hp)); C.append(fmt('pres5500 +2dB', mic_emo_pres)); C.append(fmt('lp10000 2nd', mic_emo_lp))
+C.append('};\n#define AMP_MIC_EMO_N 3\n\n')
 C.append('/* speaker resonance (fixed) */\n')
 C.append('static const AmpBiquad AMP_RESO_LOW = ')
 C.append('{ ' + ', '.join(f'{v:.9f}f' for v in reso_low) + ' };\n')

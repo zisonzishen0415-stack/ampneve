@@ -20,6 +20,7 @@ AmpNeveAudioProcessor::createParameterLayout() {
     add("cab",      "Cab",      0.50f);
     add("presence", "Presence", 1.00f);
     add("input", "Input", 1.00f);
+    layout.add(std::make_unique<juce::AudioParameterBool>("voice", "Voice", false));
     layout.add(std::make_unique<juce::AudioParameterBool>("bypass", "Bypass", false));
     return layout;
 }
@@ -54,6 +55,7 @@ void AmpNeveAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     auto* pCab      = apvts.getRawParameterValue("cab");
     auto* pPresence = apvts.getRawParameterValue("presence");
     auto* pInput    = apvts.getRawParameterValue("input");
+    auto* pVoice    = apvts.getRawParameterValue("voice");
     auto* pBypass   = apvts.getRawParameterValue("bypass");
 
     if (core == nullptr) { buffer.clear(); return; }
@@ -69,6 +71,7 @@ void AmpNeveAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     Ampsim_set_param(core, AMP_PARAM_CAB,     *pCab);
     Ampsim_set_param(core, AMP_PARAM_PRESENCE, *pPresence);
     Ampsim_set_param(core, AMP_PARAM_INPUT, *pInput);
+    Ampsim_set_param(core, AMP_PARAM_VOICE, *pVoice);
 
     const int numSamples = buffer.getNumSamples();
     if ((int)monoIn.size() < numSamples) monoIn.resize(numSamples);
