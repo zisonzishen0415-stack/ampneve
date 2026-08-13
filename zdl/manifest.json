@@ -1,0 +1,58 @@
+{
+  "effect_name": "AmpNeve",
+  "comment": "Custom amp + cabinet + Neve-style coloration for the Zoom MultiStomp. Original DSP (not a stock clone): soft clip (drive) -> Neve transformer even harmonics + 1073-style EQ -> cabinet voicing (HP/body/presence/LP, dark..bright) -> level. Cab and bass body are fixed internally (cab=1.0, bass=0.5) in this first 4-knob release; the VST exposes all six knobs.",
+  "audio_func_name": "Fx_AMP_AmpNeve",
+  "gid": 4,
+  "gid_comment": "0x04 = AMP category. SONAME prefix becomes ZDL_AMP_.",
+  "fxid": 420,
+  "fxid_comment": "0x01A4 in the custom effect range (above stock).",
+  "fxid_version": "1.00",
+  "flags_byte": 1,
+  "params": [
+    {
+      "name": "Drive",
+      "type": "knob",
+      "max": 100,
+      "default": 40,
+      "scale": "linear",
+      "audio_min": 0.0,
+      "audio_max": 1.0,
+      "audio_default": 0.4,
+      "comment": "Soft-clip drive amount."
+    },
+    {
+      "name": "Tone",
+      "type": "knob",
+      "max": 100,
+      "default": 50,
+      "scale": "linear",
+      "audio_min": 0.0,
+      "audio_max": 1.0,
+      "audio_default": 0.5,
+      "comment": "Cabinet dark(0)..bright(1)."
+    },
+    {
+      "name": "Neve",
+      "type": "knob",
+      "max": 100,
+      "default": 60,
+      "scale": "linear",
+      "audio_min": 0.0,
+      "audio_max": 1.0,
+      "audio_default": 0.6,
+      "comment": "Neve-style coloration amount."
+    },
+    {
+      "name": "Level",
+      "type": "knob",
+      "max": 100,
+      "default": 80,
+      "scale": "gain",
+      "audio_min": 0.0,
+      "audio_max": 1.0,
+      "audio_default": 0.8,
+      "comment": "Output level (core maps 0..1 to 0.5..1.5 gain)."
+    }
+  ],
+  "audio_nop": false
+}
