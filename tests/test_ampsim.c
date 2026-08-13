@@ -163,7 +163,11 @@ int main(void) {
         CHECK(r_lv_hi > 2.0f * r_lv_lo, "level scales output");
     }
 
-    /* 8. dynamic compression: loud input compresses vs quiet input */
+    /* 8. dynamic compression: loud input compresses vs quiet input.
+     *    v7 raised the power-stage drive (0.5 + 2.2*master) and sag to make
+     *    the tube power amp saturate harder, so cranked settings now squash
+     *    hard (ratio can approach 1.03). At edge-of-breakup the amp must
+     *    still keep pick dynamics - that is the touch-dynamics promise. */
     {
         Ampsim_set_param(a, AMP_PARAM_GAIN, 0.8f);
         Ampsim_set_param(a, AMP_PARAM_BASS, 0.5f);
@@ -171,13 +175,25 @@ int main(void) {
         Ampsim_set_param(a, AMP_PARAM_TREBLE, 0.5f);
         Ampsim_set_param(a, AMP_PARAM_MASTER, 0.8f);
         Ampsim_set_param(a, AMP_PARAM_LEVEL, 0.8f);
+        Ampsim_set_param(a, AMP_PARAM_PRESENCE, 1.0f);
         Ampsim_reset(a);
         float r_loud = run_rms(a, 220.0f, 0.50f, 32768u, 16384u);
         Ampsim_reset(a);
         float r_soft = run_rms(a, 220.0f, 0.15f, 32768u, 16384u);
         float ratio = r_loud / (r_soft > 1e-6f ? r_soft : 1e-6f);
         printf("    compression ratio loud/soft = %.3f\n", ratio);
-        CHECK(ratio > 1.2f && ratio < 2.9f, "loud input compresses (ratio < linear 3.33)");
+        CHECK(ratio > 1.03f && ratio < 2.9f, "cranked power stage compresses (ratio < linear 3.33)");
+
+        Ampsim_set_param(a, AMP_PARAM_GAIN, 0.25f);
+        Ampsim_set_param(a, AMP_PARAM_MASTER, 0.50f);
+        Ampsim_set_param(a, AMP_PARAM_PRESENCE, 1.0f);
+        Ampsim_reset(a);
+        float r_soft_edge = run_rms(a, 220.0f, 0.15f, 32768u, 16384u);
+        Ampsim_reset(a);
+        float r_loud_edge = run_rms(a, 220.0f, 0.50f, 32768u, 16384u);
+        float ratio_edge = r_loud_edge / (r_soft_edge > 1e-6f ? r_soft_edge : 1e-6f);
+        printf("    edge-of-breakup ratio loud/soft = %.3f\n", ratio_edge);
+        CHECK(ratio_edge > 1.30f && ratio_edge < 2.9f, "edge-of-breakup keeps pick dynamics");
     }
 
     /* 9. neve knob: bypass (0) vs full color (1) differ */
@@ -364,6 +380,121 @@ int main(void) {
         /* a pop would show up as a step far larger than the sine's slope */
         float slope = 0.2f * 2.0f * 3.14159265f * 220.0f / 44100.0f;
         CHECK(worst < 40.0f * slope + 1e-5f, "voice switch mid-stream does not pop");
+    }
+
+    /* 18. redundant same-value BASS/MID/TREBLE set_param must not reset the
+     *      tone filters (regression: hosts re-send every param each audio
+     *      block; tone_peaking used to zero v1/v2 -> block-rate clicks/buzz,
+     *      worst at extreme tone settings). */
+    {
+        uint32_t need2 = Ampsim_state_size();
+        size_t nf2 = (need2 + sizeof(float) - 1u) / sizeof(float);
+        float* memB = (float*)calloc(nf2, sizeof(float));
+        CHECK(memB != NULL, "alloc tone-regression instance");
+        if (memB) {
+            Ampsim* b = Ampsim_init(memB, (uint32_t)(nf2 * sizeof(float)), 44100.0f);
+            float tv[3][2] = { {1.0f, 0.0f}, {1.0f, 1.0f}, {1.0f, 0.0f} }; /* extreme */
+            for (int k = 0; k < 3; ++k) {
+                Ampsim_set_param(a, (AmpsimParam)(AMP_PARAM_BASS + k), tv[k][0]);
+                Ampsim_set_param(b, (AmpsimParam)(AMP_PARAM_BASS + k), tv[k][0]);
+            }
+            Ampsim_set_param(a, AMP_PARAM_GAIN, 1.0f); Ampsim_set_param(b, AMP_PARAM_GAIN, 1.0f);
+            Ampsim_set_param(a, AMP_PARAM_MASTER, 1.0f); Ampsim_set_param(b, AMP_PARAM_MASTER, 1.0f);
+            Ampsim_set_param(a, AMP_PARAM_LEVEL, 1.0f); Ampsim_set_param(b, AMP_PARAM_LEVEL, 1.0f);
+            Ampsim_set_param(a, AMP_PARAM_INPUT, 1.0f); Ampsim_set_param(b, AMP_PARAM_INPUT, 1.0f);
+            Ampsim_set_param(a, AMP_PARAM_NEVE, 1.0f); Ampsim_set_param(b, AMP_PARAM_NEVE, 1.0f);
+            Ampsim_set_param(a, AMP_PARAM_CAB, 0.5f); Ampsim_set_param(b, AMP_PARAM_CAB, 0.5f);
+            Ampsim_set_param(a, AMP_PARAM_PRESENCE, 1.0f); Ampsim_set_param(b, AMP_PARAM_PRESENCE, 1.0f);
+            Ampsim_set_param(a, AMP_PARAM_VOICE, 0.0f); Ampsim_set_param(b, AMP_PARAM_VOICE, 0.0f);
+            Ampsim_reset(a); Ampsim_reset(b);
+            int mismatch = 0;
+            for (int i = 0; i < 16384; ++i) {
+                float t = (float)i / 44100.0f;
+                float in = 0.25f * sinf(2.0f * 3.14159265f * 220.0f * t);
+                if ((i % 64) == 0) {
+                    for (int k = 0; k < 3; ++k) {
+                        Ampsim_set_param(a, (AmpsimParam)(AMP_PARAM_BASS + k), tv[k][0]);
+                        Ampsim_set_param(b, (AmpsimParam)(AMP_PARAM_BASS + k), tv[k][0]);
+                    }
+                }
+                float oa = 0.0f, ob = 0.0f;
+                Ampsim_process(a, in, &oa);
+                Ampsim_process(b, in, &ob);
+                if (fabsf(oa - ob) > 1e-5f) { mismatch = 1; break; }
+            }
+            CHECK(!mismatch, "redundant tone set_param does not reset filters");
+            free(memB);
+        }
+    }
+
+    /* 19. max-gain distortion must survive the cab: at gain=1/master=1 the
+     *      220 Hz 3rd harmonic must be strong at the output. The cabinet IR
+     *      used to have deep mid nulls that ate the drive harmonics; with
+     *      the harder drive clip and flattened IR the 3rd harmonic reads
+     *      above -16 dB (was ~-20.5 dB). */
+    {
+        Ampsim_set_param(a, AMP_PARAM_GAIN, 1.0f);
+        Ampsim_set_param(a, AMP_PARAM_BASS, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_MID, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_TREBLE, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_MASTER, 1.0f);
+        Ampsim_set_param(a, AMP_PARAM_LEVEL, 1.0f);
+        Ampsim_set_param(a, AMP_PARAM_VOICE, 0.0f);
+        Ampsim_reset(a);
+        int warm = (int)(0.5f * 44100.0f);
+        int n = 8192;
+        float* s = (float*)malloc(n * sizeof(float));
+        CHECK(s != NULL, "alloc distortion probe");
+        if (s) {
+            float o = 0.0f;
+            for (int i = 0; i < warm + n; ++i) {
+                float t = (float)i / 44100.0f;
+                Ampsim_process(a, 0.25f * sinf(2.0f * 3.14159265f * 220.0f * t), &o);
+                if (i >= warm) s[i - warm] = o;
+            }
+            float h3 = 0.0f;
+            {
+                double re = 0.0, im = 0.0;
+                double w = 2.0 * 3.14159265358979 * 3.0 * 220.0 / 44100.0;
+                for (int i = 0; i < n; ++i) { re += s[i] * cos(w * i); im += s[i] * sin(w * i); }
+                h3 = (float)(2.0 * sqrt(re * re + im * im) / n);
+            }
+            printf("    max-gain 3rd harmonic = %.1f dB\n", 20.0f * log10f(h3 + 1e-9f));
+            CHECK(h3 > 0.12f, "max-gain distortion reaches the output (3rd harmonic > -18 dB)");
+            free(s);
+        }
+    }
+
+    /* 20. max gain must distort even a quiet input. Regression: with the
+     *      drive capped at ~13x a -30 dBFS DI never reached the clip knee,
+     *      so "gain maxed" still sounded clean. The drive range now spans
+     *      ~60x so even -30 dBFS breaks up at gain=1. */
+    {
+        Ampsim_set_param(a, AMP_PARAM_GAIN, 1.0f);
+        Ampsim_set_param(a, AMP_PARAM_MASTER, 1.0f);
+        Ampsim_set_param(a, AMP_PARAM_LEVEL, 1.0f);
+        Ampsim_set_param(a, AMP_PARAM_VOICE, 0.0f);
+        Ampsim_reset(a);
+        int warm = (int)(0.5f * 44100.0f);
+        int n = 8192;
+        float* s = (float*)malloc(n * sizeof(float));
+        CHECK(s != NULL, "alloc quiet-distortion probe");
+        if (s) {
+            float o = 0.0f;
+            for (int i = 0; i < warm + n; ++i) {
+                float t = (float)i / 44100.0f;
+                Ampsim_process(a, 0.03f * sinf(2.0f * 3.14159265f * 220.0f * t), &o);
+                if (i >= warm) s[i - warm] = o;
+            }
+            double re = 0.0, im = 0.0;
+            double w = 2.0 * 3.14159265358979 * 3.0 * 220.0 / 44100.0;
+            for (int i = 0; i < n; ++i) { re += s[i] * cos(w * i); im += s[i] * sin(w * i); }
+            float h3 = (float)(2.0 * sqrt(re * re + im * im) / n);
+            printf("    max-gain 3rd harmonic @ -30dBFS = %.1f dB\n",
+                   20.0f * log10f(h3 + 1e-9f));
+            CHECK(h3 > 0.08f, "max gain distorts even a -30 dBFS input (h3 > -22 dB)");
+            free(s);
+        }
     }
 
     free(mem);

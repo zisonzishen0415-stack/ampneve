@@ -1,16 +1,20 @@
 /* core/ampsim.h - AmpNeve: boutique amp + cabinet + Neve-style coloration.
  * A from-scratch, ZDL-safe guitar amp simulator.
  *
- * Signal chain (v1 boutique):
- *   input stage (light asymmetric saturation)
- *   -> gain stage with touch dynamics (envelope-modulated drive)
- *   -> tone network (bass/mid/treble, interacting)
- *   -> power stage (softer clip + sag compression)
- *   -> output transformer (Neve even harmonics + 1073 EQ, brand color)
- *   -> speaker resonance + cabinet voicing (dark..bright)
- *   -> cabinet IR convolution (1024-tap miked-cab kernel: mic
- *      pickup + speaker-cone resonances + room, static per voice)
- *   -> level
+ * Signal chain (v15, strict real-amp structure):
+ *   V1 input stage    fixed ~4x gain + soft asymmetric clip (grid/plate
+ *                      clipping on hot input), Miller LP @ 9 kHz
+ *   V2 cold clipper   Gain-knob drive, touch-dynamics envelope, JCM800-
+ *                      style asymmetric clip, Miller LP @ 5 kHz
+ *   Klon-style mix    V1 clean tap (through V1 + power amp only) blended
+ *                      with the V2 driven path, sample-aligned
+ *   tone network      bass/mid/treble, interacting (FMV position: after
+ *                      the preamp stages, before the power amp)
+ *   power amp         phase inverter (asymmetric clip) -> push-pull soft
+ *                      clip (odd harmonics, NFB-shaped knee) + sag
+ *   transformer       Neve even harmonics + 1073 EQ (brand color)
+ *   speaker/cab       resonance + voicing + 1024-tap miked-cab IR
+ *   level
  *
  * Voice switch (0 = Nashville session, 1 = Emo/Edge): swaps the Neve EQ,
  * cab voicing and the cabinet IR, and raises the gain-stage base so edge

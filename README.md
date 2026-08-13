@@ -5,18 +5,26 @@ effect** (separate from the Reverson reverse reverb). It turns a DI /
 preamp guitar take into a "through a clean amp + 1x12 cab + Neve console"
 sound, and ships as a **VST3** plus a **Zoom G1on / MS-series ZDL**.
 
-Original DSP - no extracted factory algorithms (boutique amp v1):
+Original DSP - no extracted factory algorithms (boutique amp v15, strict
+real-amp structure):
 
 ```
 in -> input trim             level matching for any DI / loop take [Input]
-   -> input stage            light asymmetric saturation, DC block
-   -> gain stage             touch dynamics: clip drive rides the input
-                              envelope (soft picks stay clean, hard picks
-                              break up)                     [Gain]
+   -> V1 input stage         fixed ~4x gain + soft asymmetric clip (the
+                              first tube CAN clip on a hot DI), then a
+                              Miller-cap lowpass @ 9 kHz
+   -> V2 cold clipper        [Gain] knob drive + touch-dynamics envelope
+                              (soft picks stay clean, hard picks break up),
+                              JCM800-style asymmetric clip, Miller LP @ 5k
+   -> Klon-style mix         the V1 clean tap (a clean amp tone that goes
+                              through the tone stack + power amp below) is
+                              blended with the V2 driven path - more clean
+                              at low gain, distortion dominates at max
    -> tone network           interacting bass/mid/treble peaking
                               (fixed centers, linear-gain coeffs) [Bass/Mid/Treble]
-   -> power stage            softer saturation + sag (envelope-driven
-                              gain dip on transients)       [Master]
+   -> power amp              phase inverter (asymmetric clip) -> push-pull
+                              soft clip (odd harmonics, NFB-shaped knee) +
+                              sag (envelope-driven gain dip)    [Master]
    -> transformer            Neve-style even harmonics + 1073-style EQ
                               + DC block (fixed brand color)
    -> speaker                cabinet resonance (105 Hz + 3.5 kHz) + cab
@@ -47,13 +55,25 @@ independent means:
   coefficients are precomputed constants (`core/ampsim_coeffs.h`, generated
   by `tools/gen_coeffs.py`), so the audio path is pure multiply-add.
 - **Nashville session voice**: tight low end (105 Hz resonance +2.5 dB),
-  forward ~850 Hz mid, glassy top (full 4th-order 10/12 kHz lowpass) -
+  forward ~850 Hz mid, glassy top (full 4th-order 9.5/12 kHz lowpass) -
   the clean/edge platform studio country and modern shoegaze players use.
-- **10 parameters**: three pages x 3 (P1 Bass/Mid/Treble, P2 Gain/Master/Level,
-  P3 Neve/Cab/Presence) plus a dedicated **Input trim** knob and a live **input
-  level meter** in the VST LCD (green/yellow/red vs the -12..-6 dBFS DI target).
-  The ZDL fixes Input at 1.0 - the pedal's hardware INPUT VOL does the level
-  matching before the DSP, exactly like plugging into a tube amp.
+- **11 parameters**: nine knobs (P1 Bass/Mid/Treble, P2 Gain/Master/Level,
+  P3 Neve/Cab/Presence), the dedicated **Input trim** knob and the **Voice**
+  switch, plus a live **input level meter** in the VST LCD (green/yellow/red
+  vs the -12..-6 dBFS DI target). The ZDL fixes Input at 1.0 - the pedal's
+  hardware INPUT VOL does the level matching before the DSP, exactly like
+  plugging into a tube amp.
+- **Presets (VST)**: a preset row above the pedal buttons - five factory
+  presets (Nashville Clean / Edge-Breakup / British Crunch / High Gain /
+  Emo-Edge) plus user presets saved as XML files in the OS app-data
+  directory (`<appdata>/AmpNeve/Presets`). SAVE stores the current knob
+  state (overwriting the selected user preset or creating a new one), DEL
+  removes it, and the DAW's own plugin-state save (VST3 state) also works -
+  sessions restore the last settings either way.
+- **Reasonable defaults**: the factory patch is a balanced edge-of-breakup
+  tone (gain 0.35, master 0.55, level 0.75, presence 0.85) - pick softly
+  for clean, dig in for crunch - so the first note through the plugin
+  already shows the touch-dynamics character.
 - **Two voices (switch)**: Nashville (clean session sheen) and Emo/Edge
   (earlier breakup, more 400-800 Hz body, warmer top, less Neve sheen).
   VST = VOICE button + LCD indicator; ZDL = a switch param (footswitch CTRL
@@ -64,6 +84,30 @@ independent means:
 - **Touch dynamics**: the gain stage's clip drive rides the input envelope,
   so soft picks stay clean and hard picks break up - a real amp responds
   to the hand, not a fixed transfer curve.
+- **Distortion that actually reaches the output, built like a real head**:
+  gain is never crammed into one stage. V1 is a fixed ~4x stage that clips
+  on hot input; the Gain knob drives a JCM800-style cold clipper (V2) with
+  an asymmetric knee; the phase inverter clips before the push-pull power
+  stage (odd-symmetric, NFB-shaped, so even harmonics cancel like a real
+  output transformer); the Neve transformer adds its own even harmonics.
+  Each tube stage is followed by a Miller-cap interstage lowpass (9 kHz
+  after V1, 5 kHz after V2) - the same reason a cranked Soldano/Marshall
+  stays warm instead of piercing: harmonics generated in one stage are
+  shaped before the next stage multiplies them, and the 3-6 kHz harmonic
+  cluster is tamed BEFORE the tone stack's treble/presence can boost it.
+  Measured at max gain (440 Hz, post-cab, Nashville): h3 ~ -16 dB (stronger
+  saturation than the previous single-stage design), while the harmonics
+  that land in the 4-6 kHz presence band (h9-h13) are now equal to or
+  quieter than v12 instead of 2-3 dB hotter - the "modern Friedman"
+  upper-mid push is gone, the distortion body stays.
+- **Klon-style clean/dirty blend, with the clean being a real amp tone**:
+  the parallel "dry" is not the raw DI - it is the V1 clean signal that
+  also passes the tone stack and the power amp, exactly like the clean
+  floor of the same amp. The V1 tap and the V2 driven path are summed
+  before the tone network, so both branches go through the same power amp
+  and cab, sample-aligned by construction (no delay line). 40% clean at
+  low gain tapering to 23% at max: the distortion dominates, but the pick
+  attack and touch dynamics survive on top of it.
 - **Power sag**: envelope-driven gain dip on transients (1 ms attack /
   200 ms release) gives the low-end "give" of a tube power amp.
 - **Cabinet IR convolution**: speaker resonance (105 Hz + 3.5 kHz), a cab
@@ -78,17 +122,104 @@ independent means:
   1073-style EQ (110 Hz shelf, 700 Hz mid, 12 kHz shelf) + DC block, blended
   wet/dry by the Neve knob (0 = bypass).
 
+## What makes AmpNeve different from a typical amp sim
+
+Most amp sims are one big nonlinear transfer curve plus an IR loader. This
+one is designed backwards: it has to fit in a Zoom G1on pedal (a C6000 DSP
+with no OS, no heap, and no math library) **and** run as a desktop VST3, so
+every design decision is shaped by that split:
+
+- **One core, two radically different targets.** `core/ampsim.c` is the
+  exact same code in the VST3 and the ZDL. That forces the audio path to be
+  pure multiply-add: no heap, no `double`, no `sinf/cosf/powf/logf`, no
+  division. All filter coefficients are precomputed constants
+  (`core/ampsim_coeffs.h`, generated by `tools/gen_coeffs.py`); even the
+  tone-knob coefficients update with a fixed-point reciprocal approximation
+  and multiply-adds only.
+- **The cabinet IR is synthesized, not sampled.** Ordinary sims ship a real
+  miked-cab IR (or let you load one). Ours is built from parts: the old mic
+  pickup's exact HP/LP response as a causal base, speaker-cone modal
+  resonances (damped ringing), and a little room scatter - then baked into
+  a static 1024-tap kernel per voice. It reads as a miked cab (notes bloom
+  and decay through the cone) without shipping a copyrighted IR, and it is
+  ZDL-safe by construction.
+- **Touch dynamics instead of a fixed drive curve.** The gain stage's clip
+  drive rides the input envelope, so soft picks stay clean and hard picks
+  break up - the amp responds to the hand. Combined with the power-sag
+  envelope (1 ms attack / 200 ms release) this gives the low-end "give" of
+  a tube power amp.
+- **Strict real-amp structure, not one big transfer curve.** Real
+  high-gain preamps are several moderate-gain stages with interstage
+  bandwidth limiting (Miller capacitance + RC filters between stages -
+  the Soldano SLO design keeps the amp from sounding harsh by shorting
+  highs and lows to ground between gain stages). Ours mirrors that: V1
+  (fixed 4x) -> Miller LP @ 9k -> V2 cold clipper (Gain knob) -> Miller LP
+  @ 5k -> tone stack -> phase inverter -> push-pull power stage. Each
+  stage clips only a little; the harmonics accumulate and are shaped at
+  every boundary, which is how a cranked amp gets rich-but-warm saturation
+  instead of a flat-top square into the speaker.
+- **Klon-style clean/dirty blend.** The parallel clean is the V1 signal
+  through the same tone stack and power amp (a clean amp tone, not the
+  raw DI), mixed before the tone network so both branches share the power
+  amp and cab. 40% clean at low gain tapering to 23% at max - the pick
+  attack survives at high gain, the same parallel clean/dirty idea as the
+  Klon Centaur applied inside the amp.
+- **Neve coloration placed before the cab, on purpose.** The 1073-style EQ
+  and even-harmonic saturation sit before the speaker rolloff, so the
+  harmonics are tamed by the cab instead of being harsh on top of it
+  (A/B'd against post-cab placement).
+- **Per-voice cabinets.** The two voices (Nashville / Emo-Edge) swap the
+  Neve EQ, the cab voicing AND the cabinet IR itself - not just an EQ
+  tweak. Each voice gets its own miked-cab character.
+- **Calibrated input trim instead of a gain-forgiveness knob.** `Input`
+  maps 0..1 to 0.125x..1.25x, with 1.0 = the calibrated reference for a
+  -12..-6 dBFS DI, and the VST LCD shows a live input meter vs that target.
+  On the pedal, Input is fixed at 1.0 and the hardware INPUT VOL does the
+  level matching - exactly like plugging into a tube amp.
+- **Pedal-shaped UI.** The VST's three-page knob layout and VOICE button
+  mirror the Zoom pedal's LineSel pages, so a preset moves between the DAW
+  and the pedal without re-learning the interface.
+- **The whole DSP is ~4.7 KB of state** (most of it the IR delay buffer) -
+  small enough that the ZDL arena doesn't blink, and the VST is a single
+  tiny static binary with no runtime dependencies.
+- **State memory that matches each target.** The VST saves/restores plugin
+  state through the standard VST3 host mechanism AND keeps its own user
+  presets as XML files (survives even hosts that do not restore state).
+  The ZDL needs no preset system: the pedal stores every effect parameter
+  inside the saved patch, so saving a patch on the pedal is exactly
+  "remembering the last state" - power off/on and the knobs come back.
+
+Known honest trade-off: at extreme gain+master+level the power stage
+saturates fully and the output can approach 0 dBFS - set the Level knob
+for the interface, like a real amp into a real desk.
+
 ## Build
 
-The Visual Studio generator's Windows-SDK probe hangs on this machine, so use
-Ninja inside a vcvars environment:
+Builds on this machine use the MSYS2 ucrt64 toolchain (gcc/g++ 13+, cmake,
+ninja) with a JUCE checkout (7.0.12) for the VST3 shell. The VST is linked
+statically so the plugin has no runtime DLL dependencies - a missing
+`libstdc++`-family DLL was the original reason Ableton failed to load it.
 
 ```sh
-call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
-cmake -S . -B build -G Ninja -DCMAKE_MAKE_PROGRAM="<VS>/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja/ninja.exe" ^
-      -DAMPNEVE_BUILD_VST=ON -DJUCE_ROOT="<path-to-juce-7.0.12>"
+export PATH="/c/Users/<user>/AppData/Local/Programs/MSYS2/ucrt64/bin:$PATH"
+cmake -S . -B build -G Ninja \
+      -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
+      -DAMPNEVE_BUILD_VST=ON -DJUCE_ROOT="<path-to-juce-7.0.12>" \
+      -DCMAKE_SHARED_LINKER_FLAGS="-static -static-libgcc -static-libstdc++" \
+      -DCMAKE_MODULE_LINKER_FLAGS="-static -static-libgcc -static-libstdc++" \
+      -DCMAKE_EXE_LINKER_FLAGS="-static -static-libgcc -static-libstdc++"
 cmake --build build
 ctest --test-dir build
+```
+
+Install the VST3 to the system directory (as Administrator, with Ableton
+closed so the DLL is not locked):
+
+```sh
+cmake --install build
+# or copy the built bundle:
+# build/vst/AmpNeveVST_artefacts/Release/VST3/AmpNeve.vst3
+# -> "C:\Program Files\Common Files\VST3\AmpNeve.vst3"
 ```
 
 - `test_ampsim` - numeric behavior + stability

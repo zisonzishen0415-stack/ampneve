@@ -9,16 +9,19 @@ AmpNeveAudioProcessor::createParameterLayout() {
         layout.add(std::make_unique<juce::AudioParameterFloat>(
             id, name, juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), def));
     };
-    /* 9 knobs, three pages x 3 (tone / amp / voicing), pedal style: */
-    add("gain",     "Gain",     0.45f);
+    /* 9 knobs, three pages x 3 (tone / amp / voicing), pedal style. The
+     * defaults are a balanced edge-of-breakup patch (the "Edge / Breakup"
+     * factory preset): touch dynamics on the pick, warm power stage,
+     * slightly tamed presence. */
+    add("gain",     "Gain",     0.35f);
     add("bass",     "Bass",     0.50f);
     add("mid",      "Mid",      0.50f);
     add("treble",   "Treble",   0.50f);
-    add("master",   "Master",   0.50f);
-    add("level",    "Level",    0.80f);
+    add("master",   "Master",   0.55f);
+    add("level",    "Level",    0.75f);
     add("neve",     "Neve",     1.00f);
     add("cab",      "Cab",      0.50f);
-    add("presence", "Presence", 1.00f);
+    add("presence", "Presence", 0.85f);
     add("input", "Input", 1.00f);
     layout.add(std::make_unique<juce::AudioParameterBool>("voice", "Voice", false));
     layout.add(std::make_unique<juce::AudioParameterBool>("bypass", "Bypass", false));

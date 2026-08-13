@@ -37,6 +37,17 @@ const char* AmpNeveAudioProcessorEditor::names[3][3] = {
     {"Neve", "Cab", "Presence"}
 };
 
+/* Factory presets: {gain, bass, mid, treble, master, level, neve, cab,
+ * presence, input, voice}. The first one mirrors the plugin defaults. */
+const AmpNeveAudioProcessorEditor::FactoryPreset
+AmpNeveAudioProcessorEditor::factoryPresets[5] = {
+    { "Nashville Clean", { 0.20f, 0.55f, 0.45f, 0.60f, 0.45f, 0.75f, 1.00f, 0.45f, 0.70f, 1.00f, 0.0f } },
+    { "Edge / Breakup",  { 0.35f, 0.50f, 0.50f, 0.50f, 0.55f, 0.75f, 1.00f, 0.50f, 0.85f, 1.00f, 0.0f } },
+    { "British Crunch",  { 0.55f, 0.50f, 0.40f, 0.60f, 0.65f, 0.70f, 1.00f, 0.55f, 0.80f, 1.00f, 0.0f } },
+    { "High Gain",       { 0.85f, 0.50f, 0.45f, 0.55f, 0.90f, 0.70f, 1.00f, 0.55f, 0.80f, 1.00f, 0.0f } },
+    { "Emo / Edge",      { 0.40f, 0.50f, 0.60f, 0.55f, 0.60f, 0.75f, 1.00f, 0.50f, 0.80f, 1.00f, 1.0f } }
+};
+
 static const juce::Colour lcdBg(0xff0d2239);     /* deep blue LCD backlight */
 static const juce::Colour lcdDim(0xff5a7ea0);    /* dimmed pixel */
 static const juce::Colour lcdLit(0xffcfe9ff);    /* lit pixel */
@@ -64,24 +75,58 @@ AmpNeveAudioProcessorEditor::AmpNeveAudioProcessorEditor(AmpNeveAudioProcessor& 
     voiceAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         processor.apvts, "voice", voiceButton);
 
+    /* preset row: factory + user presets (XML files in the app-data dir) */
+    presetBox.setTextWhenNothingSelected("PRESET");
+    presetBox.onChange = [this] {
+        if (loadingPresets) return;
+        int sel = presetBox.getSelectedId();
+        if (sel >= 1 && sel <= 5) applyFactoryPreset(sel - 1);
+        else if (sel >= 100 && sel - 100 < userPresetFiles.size())
+            loadUserPreset(userPresetFiles[sel - 100]);
+    };
+    saveButton.onClick = [this] { saveUserPreset(); };
+    delButton.onClick  = [this] { deleteUserPreset(); };
+    addAndMakeVisible(presetBox);
+    addAndMakeVisible(saveButton);
+    addAndMakeVisible(delButton);
+
     for (int i = 0; i < 3; ++i) {
-        knobs[i].setSliderStyle(juce::Slider::RotaryVerticalDrag);
+        knobs[i].setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
         knobs[i].setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
         knobs[i].setRange(0.0, 1.0, 0.001);
+        /* classic pedal gauge: min lower-left, mid straight up, max lower-right */
+        knobs[i].setRotaryParameters(juce::MathConstants<float>::pi * 0.75f,
+                                     juce::MathConstants<float>::pi * 2.25f, true);
+        knobs[i].setScrollWheelEnabled(true);
+        /* drag-start focus: only when the user is actually dragging */
+        knobs[i].onValueChange = [this, i] {
+            if (knobs[i].isMouseButtonDown()) setFocus(i);
+        };
         addAndMakeVisible(knobs[i]);
     }
     /* dedicated Input knob (hardware INPUT VOL), outside the page knobs */
-    inputKnob.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    inputKnob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     inputKnob.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     inputKnob.setRange(0.0, 1.0, 0.001);
+    inputKnob.setRotaryParameters(juce::MathConstants<float>::pi * 0.75f,
+                                  juce::MathConstants<float>::pi * 2.25f, true);
+    inputKnob.setScrollWheelEnabled(true);
+    inputKnob.setDoubleClickReturnValue(true, 1.0);   /* INPUT reset */
     addAndMakeVisible(inputKnob);
     inputAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         processor.apvts, "input", inputKnob);
 
     knobLaf = std::make_unique<PedalKnobLookAndFeel>();
     setLookAndFeel(knobLaf.get());
+    /* keep the pedal chassis aspect ratio when the host resizes the editor */
+    resizeConstrainer = std::make_unique<juce::ComponentBoundsConstrainer>();
+    resizeConstrainer->setFixedAspectRatio(400.0 / 420.0);
+    setConstrainer(resizeConstrainer.get());
+    setResizeLimits(340, 357, 640, 672);
+    setResizable(true, false);
     setPage(0);
-    setSize(400, 380);
+    refreshPresetList();
+    setSize(400, 420);
     startTimerHz(30);   /* keep LCD values + input meter live */
 }
 
@@ -104,10 +149,19 @@ juce::Rectangle<int> AmpNeveAudioProcessorEditor::slotRect(int slot) const {
 
 juce::Rectangle<int> AmpNeveAudioProcessorEditor::knobRect(int index) const {
     auto lcd = lcdRect();
-    auto kArea = juce::Rectangle<int>(lcd.getX(), lcd.getBottom() + 12,
-                                      lcd.getWidth(), getHeight() - lcd.getBottom() - 46);
+    /* knob column spans from below the LCD to above the preset/button rows;
+     * the returned rect is always square so the rotary is a circle at any
+     * editor size (a stretched knob is the "aspect distortion" bug). */
+    int top = lcd.getBottom() + 12;
+    int bottom = getHeight() - 34 - 30 - 8;
+    int h = bottom - top;
+    if (h < 40) h = 40;
+    auto kArea = juce::Rectangle<int>(lcd.getX(), top, lcd.getWidth(), h);
     int w = kArea.getWidth() / 4;
-    return juce::Rectangle<int>(kArea.getX() + index * w, kArea.getY(), w, kArea.getHeight());
+    int side = (w < h) ? w : h;
+    int x = kArea.getX() + index * w + (w - side) / 2;
+    int y = kArea.getY() + (h - side) / 2;
+    return juce::Rectangle<int>(x, y, side, side);
 }
 
 void AmpNeveAudioProcessorEditor::setPage(int page) {
@@ -119,6 +173,9 @@ void AmpNeveAudioProcessorEditor::setPage(int page) {
         if (has) {
             attachments[i] = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
                 processor.apvts, ids[currentPage][i], knobs[i]);
+            /* double-click returns the knob to the plugin's default */
+            if (auto* p = processor.apvts.getParameter(ids[currentPage][i]))
+                knobs[i].setDoubleClickReturnValue(true, (double)p->getDefaultValue());
         }
     }
     repaint();
@@ -229,13 +286,18 @@ void AmpNeveAudioProcessorEditor::paint(juce::Graphics& g) {
             g.setColour(lcdLit);
             g.drawRect(slotRect(i), 2);
         }
+        /* numeric readout so the knob position is actually legible */
+        g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 11.0f, juce::Font::plain));
+        g.setColour(i == focusedSlot ? lcdLit : lcdDim);
+        g.drawText(juce::String::formatted("%.2f", val), slot,
+                   juce::Justification::centred, false);
     }
 
     /* INPUT knob caption under the rightmost knob */
     auto kIn = knobRect(3);
     g.setColour(lcdDim);
     g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 11.0f, juce::Font::bold));
-    g.drawText("INPUT", juce::Rectangle<int>(kIn.getX(), getHeight() - 30, kIn.getWidth(), 18),
+    g.drawText("INPUT", juce::Rectangle<int>(kIn.getX(), kIn.getBottom() + 2, kIn.getWidth(), 14),
                juce::Justification::centred, false);
 }
 
@@ -245,9 +307,14 @@ void AmpNeveAudioProcessorEditor::resized() {
         knobs[i].setBounds(knobRect(i));
     inputKnob.setBounds(knobRect(3));
     auto area = getLocalBounds();
-    bypassButton.setBounds(16, area.getHeight() - 34, 84, 24);
-    pageButton.setBounds(108, area.getHeight() - 34, 84, 24);
-    voiceButton.setBounds(200, area.getHeight() - 34, 84, 24);
+    auto btnRow = area.removeFromBottom(34);
+    bypassButton.setBounds(16, btnRow.getY(), 84, 24);
+    pageButton.setBounds(108, btnRow.getY(), 84, 24);
+    voiceButton.setBounds(200, btnRow.getY(), 84, 24);
+    auto presetRow = area.removeFromBottom(30);
+    presetBox.setBounds(presetRow.getX() + 16, presetRow.getY() + 2, 220, 24);
+    saveButton.setBounds(presetRow.getX() + 248, presetRow.getY() + 2, 66, 24);
+    delButton.setBounds(presetRow.getX() + 322, presetRow.getY() + 2, 62, 24);
 }
 
 void AmpNeveAudioProcessorEditor::timerCallback() {
@@ -257,5 +324,87 @@ void AmpNeveAudioProcessorEditor::timerCallback() {
         if (voiceButton.getButtonText() != juce::String(txt))
             voiceButton.setButtonText(txt);
     }
+    repaint();
+}
+
+juce::File AmpNeveAudioProcessorEditor::presetDir() const {
+    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+        .getChildFile("AmpNeve").getChildFile("Presets");
+}
+
+static const char* presetParamIds[11] = {
+    "gain", "bass", "mid", "treble", "master", "level",
+    "neve", "cab", "presence", "input", "voice"
+};
+
+void AmpNeveAudioProcessorEditor::refreshPresetList() {
+    juce::ScopedValueSetter<bool> guard(loadingPresets, true);
+    presetBox.clear();
+    for (int i = 0; i < 5; ++i)
+        presetBox.addItem(factoryPresets[i].name, i + 1);
+    presetBox.addSeparator();
+    userPresetFiles.clear();
+    auto dir = presetDir();
+    auto files = dir.findChildFiles(juce::File::findFiles, false, "*.xml");
+    files.sort();
+    for (int i = 0; i < files.size(); ++i) {
+        userPresetFiles.add(files[i]);
+        presetBox.addItem(files[i].getFileNameWithoutExtension(), 100 + i);
+    }
+    presetBox.setSelectedId(0, juce::dontSendNotification);
+}
+
+void AmpNeveAudioProcessorEditor::applyFactoryPreset(int index) {
+    if (index < 0 || index >= 5) return;
+    const FactoryPreset& p = factoryPresets[index];
+    for (int i = 0; i < 11; ++i)
+        if (auto* param = processor.apvts.getParameter(presetParamIds[i]))
+            param->setValueNotifyingHost(p.v[i]);
+    if (auto* param = processor.apvts.getParameter("bypass"))
+        param->setValueNotifyingHost(0.0f);
+    repaint();
+}
+
+void AmpNeveAudioProcessorEditor::saveUserPreset() {
+    auto dir = presetDir();
+    if (!dir.isDirectory() && !dir.createDirectory()) return;
+    juce::File target;
+    int sel = presetBox.getSelectedId();
+    if (sel >= 100 && sel - 100 < userPresetFiles.size())
+        target = userPresetFiles[sel - 100];               /* overwrite selected */
+    else {
+        int n = 1;
+        while (dir.getChildFile(juce::String("Custom ") + juce::String(n) + ".xml").exists())
+            ++n;
+        target = dir.getChildFile(juce::String("Custom ") + juce::String(n) + ".xml");
+    }
+    auto state = processor.apvts.copyState();
+    /* drop bypass from the stored state so presets always load un-bypassed */
+    for (int i = state.getNumChildren() - 1; i >= 0; --i)
+        if (state.getChild(i).getProperty("id").toString() == "bypass")
+            state.removeChild(i, nullptr);
+    state.setProperty("presetName", target.getFileNameWithoutExtension(), nullptr);
+    std::unique_ptr<juce::XmlElement> xml(state.createXml());
+    xml->writeTo(target);
+    refreshPresetList();
+    int id = 100 + userPresetFiles.indexOf(target);
+    if (id >= 100)
+        presetBox.setSelectedId(id, juce::dontSendNotification);
+}
+
+void AmpNeveAudioProcessorEditor::deleteUserPreset() {
+    int sel = presetBox.getSelectedId();
+    if (sel < 100 || sel - 100 >= userPresetFiles.size()) return;
+    userPresetFiles[sel - 100].deleteFile();
+    refreshPresetList();
+    presetBox.setSelectedId(2, juce::dontSendNotification);   /* show the default */
+}
+
+void AmpNeveAudioProcessorEditor::loadUserPreset(const juce::File& file) {
+    std::unique_ptr<juce::XmlElement> xml(juce::XmlDocument::parse(file));
+    if (xml == nullptr || !xml->hasTagName(processor.apvts.state.getType())) return;
+    processor.apvts.replaceState(juce::ValueTree::fromXml(*xml));
+    if (auto* param = processor.apvts.getParameter("bypass"))
+        param->setValueNotifyingHost(0.0f);
     repaint();
 }

@@ -104,15 +104,15 @@ int main(int argc, char** argv) {
         return 1;
     }
     float input  = argc > 3 ? (float)atof(argv[3]) : 1.00f;
-    float gain   = argc > 4 ? (float)atof(argv[4]) : 0.45f;
+    float gain   = argc > 4 ? (float)atof(argv[4]) : 0.35f;
     float bass   = argc > 5 ? (float)atof(argv[5]) : 0.50f;
     float mid    = argc > 6 ? (float)atof(argv[6]) : 0.50f;
     float treble = argc > 7 ? (float)atof(argv[7]) : 0.50f;
-    float master   = argc > 8 ? (float)atof(argv[8]) : 0.50f;
-    float level    = argc > 9 ? (float)atof(argv[9]) : 0.80f;
+    float master   = argc > 8 ? (float)atof(argv[8]) : 0.55f;
+    float level    = argc > 9 ? (float)atof(argv[9]) : 0.75f;
     float neve     = argc > 10 ? (float)atof(argv[10]) : 1.00f;
     float cab      = argc > 11 ? (float)atof(argv[11]) : 0.50f;
-    float presence = argc > 12 ? (float)atof(argv[12]) : 1.00f;
+    float presence = argc > 12 ? (float)atof(argv[12]) : 0.85f;
     float voice    = argc > 13 ? (float)atof(argv[13]) : 0.00f;
 
     float* in = NULL; unsigned rate = 0, n = 0;

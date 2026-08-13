@@ -14,7 +14,8 @@ OUT = os.path.normpath(os.path.join(HERE, '..', 'core', 'ampsim_coeffs.h'))
 #     `python tools/gen_coeffs.py` to regenerate core/ampsim_coeffs.h. ---
 CAB_IR_N = 1024            # taps (state: 1024 floats/channel of delay)
 CAB_IR_INIT_DELAY = 29     # ~0.66 ms speaker-to-mic flight time
-CAB_IR_ROOM_LEVEL = 0.04   # room scatter level (0 = off)
+CAB_IR_ROOM_LEVEL = 0.015  # room scatter level (0 = off); kept low so the
+                           # scatter's comb nulls don't eat the mid harmonics
 CAB_IR_ROOM_TAU = 0.012    # room tail decay, seconds
 CAB_IR_SEED_NASH = 12345   # deterministic scatter seeds (stable builds)
 CAB_IR_SEED_EMO = 67890
@@ -23,15 +24,15 @@ CAB_IR_RESON_NASH = [
     (150.0, 0.006, 3.0),   # cab thump
     (350.0, 0.005, 2.0),   # low-mid body
     (900.0, 0.004, 2.5),   # cone bloom
-    (1800.0, 0.0035, 1.5), # upper bloom
-    (2800.0, 0.0028, 1.0), # edge ring
+    (1800.0, 0.0035, 1.0), # upper bloom
+    (2800.0, 0.0028, 0.6), # edge ring
 ]
 CAB_IR_RESON_EMO = [
     (160.0, 0.006, 3.0),
     (420.0, 0.005, 2.5),
     (900.0, 0.004, 3.0),
-    (1700.0, 0.0032, 1.5),
-    (2600.0, 0.0026, 1.0),
+    (1700.0, 0.0032, 1.0),
+    (2600.0, 0.0026, 0.6),
 ]
 
 def _ba(c):
@@ -60,11 +61,10 @@ def _res_amp(f0, tau, db, m0):
     return m0 * (10.0 ** (db / 20.0) - 1.0) / (tau * FS / 2.0)
 
 def synth_cab_ir(mic_sections, n, init_delay, resonances, room_level, room_tau, seed):
-    from scipy.signal import lfilter
     taps = n - init_delay
     b, a = _cascade(mic_sections)
     imp = np.zeros(taps); imp[0] = 1.0
-    base = lfilter(b, a, imp)               # exact old-mic response, causal phase
+    base = _lfilter(b, a, imp)              # exact old-mic response, causal phase
     t = np.arange(taps) / FS
     ir = base.copy()
     Xb = np.fft.rfft(base, n=4096)
@@ -74,7 +74,7 @@ def synth_cab_ir(mic_sections, n, init_delay, resonances, room_level, room_tau, 
         ir += _res_amp(f0, tau, db, m0) * np.exp(-t / tau) * np.sin(2.0 * np.pi * f0 * t + 0.7)
     rng = np.random.default_rng(seed)
     noise = rng.standard_normal(taps + 8192)
-    shaped = lfilter(b, a, noise)           # room scatter shaped by the mic EQ
+    shaped = _lfilter(b, a, noise)          # room scatter shaped by the mic EQ
     onset = int(0.0008 * FS)
     tail = np.zeros(taps)
     tail[onset:] = np.exp(-t[onset:] / room_tau)
@@ -126,9 +126,42 @@ def shelf(fs, f0, gain_db, high):
     return np.array([b0/a0, b1/a0, b2/a0, a1/a0, a2/a0])
 
 def butter(fs, fc, order, kind):
-    from scipy import signal
-    sos = signal.butter(order, fc, kind, fs=fs, output='sos')
-    return [np.array([b0/a0, b1/a0, b2/a0, a1/a0, a2/a0]) for b0,b1,b2,a0,a1,a2 in sos]
+    """Butterworth biquad sections without scipy (RBJ coefficients).
+    2nd order: Q = 0.7071; 4th order: cascade Q = 0.5412 / 1.3066. """
+    w0 = 2.0 * np.pi * fc / fs
+    c = np.cos(w0)
+    s = np.sin(w0)
+    if kind == 'lowpass':
+        def section(q):
+            alpha = s / (2.0 * q)
+            return np.array([(1.0 - c) / 2.0, 1.0 - c, (1.0 - c) / 2.0,
+                             -2.0 * c, 1.0 - alpha]) / (1.0 + alpha)
+    else:
+        def section(q):
+            alpha = s / (2.0 * q)
+            return np.array([(1.0 + c) / 2.0, -(1.0 + c), (1.0 + c) / 2.0,
+                             -2.0 * c, 1.0 - alpha]) / (1.0 + alpha)
+    if order == 2:
+        return [section(0.70710678)]
+    if order == 4:
+        return [section(0.54119610), section(1.30656296)]
+    raise ValueError('only order 2/4 supported')
+
+def _lfilter(b, a, x):
+    """Arbitrary-order direct-form I filter (a0 normalized to 1)."""
+    a = np.asarray(a, dtype=np.float64)
+    b = np.asarray(b, dtype=np.float64)
+    y = np.zeros(len(x))
+    for i in range(len(x)):
+        acc = b[0] * x[i]
+        for k in range(1, len(b)):
+            if i >= k:
+                acc += b[k] * x[i - k]
+        for k in range(1, len(a)):
+            if i >= k:
+                acc -= a[k] * y[i - k]
+        y[i] = acc
+    return y
 
 def fmt(name, arr, indent='    '):
     s = ', '.join(f'{v:.9f}f' for v in arr)
@@ -147,7 +180,7 @@ C.append('typedef struct { float b0, b1, b2, a1, a2; } AmpBiquad;\n\n')
 hp95 = butter(FS, 95.0, 2, 'highpass')[0]
 body = peaking(FS, 220.0, 1.0, 3.0)
 midcut = peaking(FS, 550.0, 1.2, -2.0)
-pres_dark = peaking(FS, 4200.0, 1.1, 4.5)
+pres_dark = peaking(FS, 4200.0, 1.1, 3.5)
 lp_dark = butter(FS, 9500.0, 4, 'lowpass')
 C.append('/* cab DARK chain (TONE=0): woody 1x12, tighter/papery */\n')
 C.append('static const AmpBiquad AMP_CAB_DARK[] = {\n')
@@ -156,7 +189,7 @@ C.append(fmt('pres4200 +4.5dB', pres_dark))
 for i,b in enumerate(lp_dark): C.append(fmt(f'lp9500 4th #{i}', b))
 C.append('};\n#define AMP_CAB_DARK_N 5\n\n')
 
-pres_bright = peaking(FS, 5500.0, 1.1, 6.0)
+pres_bright = peaking(FS, 5500.0, 1.1, 5.0)
 lp_bright = butter(FS, 12000.0, 4, 'lowpass')
 C.append('/* cab BRIGHT chain (TONE=1): glassier cone edge */\n')
 C.append('static const AmpBiquad AMP_CAB_BRIGHT[] = {\n')
@@ -185,7 +218,7 @@ C.append('};\n#define AMP_NEVE_EMO_N 3\n\n')
 hp_emo = butter(FS, 95.0, 2, 'highpass')[0]
 body_emo = peaking(FS, 220.0, 1.0, 3.0)
 body500 = peaking(FS, 500.0, 1.0, 1.5)   # 400-800 body instead of de-honk
-pres_dark_emo = peaking(FS, 3800.0, 1.1, 4.0)
+pres_dark_emo = peaking(FS, 3800.0, 1.1, 3.0)
 lp_dark_emo = butter(FS, 9000.0, 4, 'lowpass')
 C.append('/* cab DARK EMO (VOICE=1): woody, mid-forward, warmer top */\n')
 C.append('static const AmpBiquad AMP_CAB_DARK_EMO[] = {\n')
@@ -194,7 +227,7 @@ C.append(fmt('pres3800 +4dB', pres_dark_emo))
 for i,b in enumerate(lp_dark_emo): C.append(fmt(f'lp9000 4th #{i}', b))
 C.append('};\n#define AMP_CAB_DARK_EMO_N 5\n\n')
 
-pres_bright_emo = peaking(FS, 4800.0, 1.1, 5.0)
+pres_bright_emo = peaking(FS, 4800.0, 1.1, 4.0)
 lp_bright_emo = butter(FS, 11000.0, 4, 'lowpass')
 C.append('/* cab BRIGHT EMO (VOICE=1): glassier cone edge */\n')
 C.append('static const AmpBiquad AMP_CAB_BRIGHT_EMO[] = {\n')
@@ -206,12 +239,23 @@ C.append('};\n#define AMP_CAB_BRIGHT_EMO_N 5\n\n')
 # --- cabinet IR (static convolution kernel, replaces the old mic biquads).
 #     The cab voicing chains above still run in front, so the Cab knob
 #     keeps working; the IR carries the miked-cab character after them. ---
-mic_nash_ir = butter(FS, 70.0, 2, 'highpass') + [peaking(FS, 5800.0, 1.0, 3.0)] + butter(FS, 11000.0, 2, 'lowpass')
-mic_emo_ir = butter(FS, 70.0, 2, 'highpass') + [peaking(FS, 5500.0, 1.0, 2.0)] + butter(FS, 10000.0, 2, 'lowpass')
+mic_nash_ir = butter(FS, 70.0, 2, 'highpass') + [peaking(FS, 5800.0, 1.0, 1.0)] + butter(FS, 11000.0, 2, 'lowpass')
+mic_emo_ir = butter(FS, 70.0, 2, 'highpass') + [peaking(FS, 5500.0, 1.0, 0.5)] + butter(FS, 10000.0, 2, 'lowpass')
 ir_nash = synth_cab_ir(mic_nash_ir, CAB_IR_N, CAB_IR_INIT_DELAY, CAB_IR_RESON_NASH,
                        CAB_IR_ROOM_LEVEL, CAB_IR_ROOM_TAU, CAB_IR_SEED_NASH)
 ir_emo = synth_cab_ir(mic_emo_ir, CAB_IR_N, CAB_IR_INIT_DELAY, CAB_IR_RESON_EMO,
                       CAB_IR_ROOM_LEVEL, CAB_IR_ROOM_TAU, CAB_IR_SEED_EMO)
+# equalize voice loudness over the guitar band (80..5000 Hz) so the Emo/Edge
+# voice doesn't sit ~4-8 dB quieter than Nashville (its room-scatter comb
+# nulled the lows). Keeps each voice's spectral character, fixes the level.
+def _band_rms(ir, lo, hi):
+    X = np.fft.rfft(ir, n=8192)
+    fr2 = np.fft.rfftfreq(8192, 1.0 / FS)
+    sel = (fr2 >= lo) & (fr2 <= hi)
+    return np.sqrt(np.mean(np.abs(X[sel]) ** 2))
+rms_nash = _band_rms(ir_nash, 80.0, 5000.0)
+rms_emo = _band_rms(ir_emo, 80.0, 5000.0)
+ir_emo *= rms_nash / rms_emo
 C.append('#define AMP_CAB_IR_N 1024\n\n')
 C.append('/* cabinet IR - Nashville (VOICE=0): tight lows, glassy top, drier room. */\n')
 C.append(fmt_ir('AMP_CAB_IR_NASH', ir_nash) + '\n')
@@ -224,6 +268,27 @@ C.append('static const AmpBiquad AMP_RESO_LOW = ')
 C.append('{ ' + ', '.join(f'{v:.9f}f' for v in reso_low) + ' };\n')
 C.append('static const AmpBiquad AMP_RESO_HIGH = ')
 C.append('{ ' + ', '.join(f'{v:.9f}f' for v in reso_hi) + ' };\n\n')
+
+# --- preamp interstage Miller-cap lowpasses (v15) ---------------------
+# Real tube gain stages roll off in the treble via Miller capacitance
+# (a typical 12AX7 stage with a 68k source clips ~15.5 kHz, AikenAmps),
+# and high-gain preamps (Soldano SLO, Mesa) add interstage RC networks
+# that "short the highs and lows to ground" so each stage's harmonics are
+# shaped before the next stage multiplies them - that is why cranked tube
+# amps stay warm instead of piercing. Two poles:
+#   V1 stage -> LP1 @ 9 kHz   (shapes the first stage's harmonics)
+#   V2 cold clipper -> LP2 @ 5.0 kHz (shapes the 3-6 kHz harmonic cluster
+#     before the tone stack boosts it - that cluster is what makes cranked
+#     drive read "modern/Friedman" instead of warm)
+# The tone stack / power amp / cab sit after LP2, so treble control,
+# presence and the speaker resonance still add top end on purpose.
+pre_lp1 = butter(FS, 9000.0, 2, 'lowpass')[0]
+pre_lp2 = butter(FS, 5000.0, 2, 'lowpass')[0]
+C.append('/* preamp interstage Miller-cap LPs (v15): shape stage harmonics */\n')
+C.append('static const AmpBiquad AMP_PRE_LP1 = ')
+C.append('{ ' + ', '.join(f'{v:.9f}f' for v in pre_lp1) + ' };\n')
+C.append('static const AmpBiquad AMP_PRE_LP2 = ')
+C.append('{ ' + ', '.join(f'{v:.9f}f' for v in pre_lp2) + ' };\n\n')
 
 # --- neve 1073-style: LF shelf 110 +1.5dB, mid 700 +1dB Q0.7, HF shelf 12k +1.5dB
 #     Nashville: tight lows, subtle mid color, extra glass. ---

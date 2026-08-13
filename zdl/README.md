@@ -1,10 +1,14 @@
 # AmpNeve ZDL (Zoom MultiStomp)
 
 Custom AMP-category effect for the Zoom G1on / MS-series (ZDL). Original
-boutique-amp DSP: input trim (fixed) -> input stage -> gain stage with
-touch dynamics -> tone network -> power stage with sag -> Neve transformer
-+ 1073-style EQ -> speaker resonance + cabinet voicing + 1024-tap cabinet
-IR convolution (miked-cab kernel: mic + cone resonances + room) -> level.
+boutique-amp DSP, strict real-amp structure (v15): input trim (fixed) ->
+V1 (fixed ~4x gain, soft asymmetric clip, Miller LP @ 9 kHz) -> V2 cold
+clipper (Gain knob + touch dynamics, asymmetric clip, Miller LP @ 5 kHz)
+-> Klon-style clean/dirty mix (V1 clean tap + V2 driven path, both through
+the tone stack and power amp) -> tone network -> phase inverter + push-pull
+power amp with sag -> Neve transformer + 1073-style EQ -> speaker
+resonance + cabinet voicing + 1024-tap cabinet IR convolution (miked-cab
+kernel: mic + cone resonances + room) -> level.
 Nine knobs + a Voice switch across the LineSel pages (mirrors the VST).
 Voice toggles Nashville (session sheen) vs Emo/Edge (earlier breakup,
 more mid body, warmer top):
@@ -14,9 +18,9 @@ more mid body, warmer top):
 | P1 | 1 | Bass | 0..1 | tone low (0.5 flat) |
 | P1 | 2 | Mid | 0..1 | tone mid (0.5 flat) |
 | P1 | 3 | Treble | 0..1 | tone high (0.5 flat) |
-| P2 | 1 | Gain | 0..1 | preamp gain + touch-dynamics base |
-| P2 | 2 | Master | 0..1 | power drive + sag amount |
-| P2 | 3 | Level | 0..1 | output (0.5..1.5 gain) |
+| P2 | 1 | Gain | 0..1 | V2 cold-clipper drive (touch dynamics, ~17x max) |
+| P2 | 2 | Master | 0..1 | PI + push-pull power drive + sag amount |
+| P2 | 3 | Level | 0..1 | output (0.20..0.90 gain) |
 | P3 | 1 | Neve | 0..1 | coloration wet/dry (0 = bypass) |
 | P3 | 2 | Cab | 0..1 | cabinet dark(0)..bright(1) |
 | P3 | 3 | Presence | 0..1 | speaker 3.5 kHz resonance |
@@ -25,6 +29,15 @@ more mid body, warmer top):
 Input trim is fixed at 1.0 (the calibrated reference) and takes no knob:
 the pedal's hardware INPUT VOL does the level matching before the DSP,
 exactly like plugging into a tube amp.
+
+## State memory
+
+The ZDL needs no preset system: the pedal stores every effect parameter
+inside the saved patch, and the DSP reads `params[]` from the host every
+block. Saving the patch on the pedal is exactly "remembering the last
+state" - power off/on and reloading the patch restores the knobs. Factory
+defaults (used only when a patch's param slot is invalid) match the VST:
+gain 0.35, master 0.55, level 0.75, presence 0.85.
 
 ## Hardware / build status
 

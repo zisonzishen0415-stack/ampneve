@@ -1,6 +1,6 @@
 {
   "effect_name": "AmpNeve",
-  "comment": "Custom boutique amp + cabinet + Neve-style coloration for the Zoom MultiStomp. Original DSP (not a stock clone): input stage -> gain stage with touch dynamics (Gain) -> tone network Bass/Mid/Treble -> power stage with sag (Master) -> Neve transformer even harmonics + 1073-style EQ (Neve, wet/dry) -> speaker resonance + cabinet (Cab dark..bright, Presence) -> Level. Nine knobs, three pages x three, mirroring the VST: P1 Bass/Mid/Treble, P2 Gain/Master/Level, P3 Neve/Cab/Presence.",
+  "comment": "Custom boutique amp + cabinet + Neve-style coloration for the Zoom MultiStomp. Original DSP (not a stock clone), strict real-amp structure (v15): V1 fixed ~4x gain + Miller LP @9k -> V2 cold clipper (Gain + touch dynamics) + Miller LP @5k -> Klon-style clean/dirty mix -> tone network Bass/Mid/Treble -> phase inverter + push-pull power stage with sag (Master) -> Neve transformer even harmonics + 1073-style EQ (Neve, wet/dry) -> speaker resonance + cabinet (Cab dark..bright, Presence) -> Level. Nine knobs, three pages x three, mirroring the VST: P1 Bass/Mid/Treble, P2 Gain/Master/Level, P3 Neve/Cab/Presence. Params persist with the pedal patch (save the patch to remember the settings).",
   "audio_func_name": "Fx_AMP_AmpNeve",
   "gid": 4,
   "gid_comment": "0x04 = AMP category. SONAME prefix becomes ZDL_AMP_.",
@@ -46,44 +46,44 @@
       "name": "Gain",
       "type": "knob",
       "max": 100,
-      "default": 45,
+      "default": 35,
       "scale": "linear",
       "audio_min": 0.0,
       "audio_max": 1.0,
-      "audio_default": 0.45,
-      "comment": "Preamp gain + touch-dynamics base (soft = clean, hard = crunch)."
+      "audio_default": 0.35,
+      "comment": "V2 cold-clipper drive + touch-dynamics base (soft = clean, hard = crunch)."
     },
     {
       "name": "Master",
       "type": "knob",
       "max": 100,
-      "default": 50,
+      "default": 55,
       "scale": "linear",
       "audio_min": 0.0,
       "audio_max": 1.0,
-      "audio_default": 0.5,
-      "comment": "Power-stage drive + sag amount."
+      "audio_default": 0.55,
+      "comment": "PI + push-pull power drive + sag amount."
     },
     {
       "name": "Level",
       "type": "knob",
       "max": 100,
-      "default": 80,
+      "default": 75,
       "scale": "gain",
       "audio_min": 0.0,
       "audio_max": 1.0,
-      "audio_default": 0.8,
-      "comment": "Output level (core maps 0..1 to 0.5..1.5 gain)."
+      "audio_default": 0.75,
+      "comment": "Output level (core maps 0..1 to 0.20..0.90 gain)."
     },
     {
       "name": "Neve",
       "type": "knob",
       "max": 100,
-      "default": 100,
+      "default": 85,
       "scale": "linear",
       "audio_min": 0.0,
       "audio_max": 1.0,
-      "audio_default": 1.0,
+      "audio_default": 0.85,
       "comment": "Neve coloration amount: transformer even harmonics + 1073 EQ wet/dry (0 = bypass)."
     },
     {

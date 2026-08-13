@@ -12,23 +12,26 @@ typedef struct {
     float input;               /* input trim, 0..1 (1.0 = calibrated ref) */
     float gain, bass, mid, treble, master, level;
     float voice;               /* 0 = Nashville, 1 = Emo/Edge */
-    float gain_base;           /* voice-dependent gain-stage base */
+    float gain_base;           /* voice-dependent V2 drive base */
+    float dry_mix;             /* Klon dry amount: more dry when clean */
     float sample_rate;
 
     /* input stage */
     float in_g;
 
-    /* gain stage (touch dynamics) */
-    float gain_drive;
+    /* preamp stages: V1 fixed gain; V2 cold-clipper drive (touch dynamics) */
+    float v2_drive;
     float env;
     float env_attack_c, env_release_c;
     float dc_x1, dc_y1;         /* input-stage DC block */
+    Bq pre_lp1, pre_lp2;        /* Miller-cap interstage lowpasses (v15) */
 
     /* tone network (bass/mid/treble peaking, runtime linear-gain) */
     Bq tone_bass, tone_mid, tone_treble;
 
     /* power stage */
-    float power_drive;
+    float pi_drive;             /* phase-inverter drive */
+    float pp_drive;             /* push-pull power-tube drive */
     float sag_amt;
     float sag_env;
     float sag_attack_c, sag_release_c;
@@ -98,12 +101,53 @@ float Ampsim_input_gain(float v) {
     return 0.125f + 1.125f * v;
 }
 
-/* smooth cubic soft clip: x - x^3/3 on [-1,1], saturates at +-2/3.
- * No division, no math library. */
-static float clip3(float x) {
-    if (x > 1.0f)  return 0.6666667f;
-    if (x < -1.0f) return -0.6666667f;
-    return x - 0.33333334f * x * x * x;
+/* tube-style asymmetric soft clip (Tube-Screamer family): the positive half
+ * clips earlier (0.5) than the negative (0.8), injecting even harmonics so
+ * the clipping is audible as grit, while C1 cubic knees keep high-order
+ * harmonics low (warm, no digital buzz). Monotonic, ZDL-safe. */
+static float clip_ts(float x) {
+    float ax = x < 0.0f ? -x : x;
+    float y;
+    if (x >= 0.0f) {
+        if (ax <= 0.50f)      y = ax;
+        else if (ax <= 1.50f) {
+            float t = ax - 0.50f;
+            y = 0.50f + t - 0.30f * t * t * t;
+        } else if (ax <= 3.50f) {
+            y = 1.20f + 0.10f * (ax - 1.50f);
+        } else                y = 1.40f;
+    } else {
+        if (ax <= 0.80f)      y = -ax;
+        else if (ax <= 1.80f) {
+            float t = ax - 0.80f;
+            y = -(0.80f + t - 0.02f * t * t - 0.28f * t * t * t);
+        } else if (ax <= 3.50f) {
+            y = -(1.50f + 0.12f * (ax - 1.80f));
+        } else                y = -1.70f;
+    }
+    return y;
+}
+
+/* Push-pull power-amp clip (v15): odd-symmetric, NFB-shaped. Push-pull
+ * cancels even harmonics in the output transformer, so unlike the single-
+ * ended preamp stages this curve is strictly odd (h2/h4/h6 ~ 0). The
+ * classic cubic soft clip x - x^3/3 makes h3 the dominant harmonic (the
+ * "power-amp breakup" sound), the tail then saturates gently to 1.08 with
+ * no flat-top square (flat tops are what sound digital). Monotonic, C1,
+ * ZDL-safe. Design verified in work/design_pp.py. */
+static float clip_pp(float x) {
+    float ax = x < 0.0f ? -x : x;
+    float s  = x < 0.0f ? -1.0f : 1.0f;
+    float y;
+    if (ax <= 1.00f) {
+        y = ax - ax * ax * ax * 0.333333333f;
+    }
+    else if (ax <= 2.30f) {
+        float t = (ax - 1.00f) * 0.769231f;
+        y = 0.666666667f + t * t * (1.130000000f + t * -0.736666667f);
+    }
+    else { y = 1.080000000f; }
+    return s * y;
 }
 
 /* RBJ peaking biquad with linear gain A (0.5..1.5), fixed w0 constants.
@@ -141,6 +185,8 @@ static void update_voice_coeffs(Ampsim* a) {
 static void update_stage_coeffs(Ampsim* a) {
     AmpsimState* s = &a->s;
     update_voice_coeffs(a);
+    bq_load(&s->pre_lp1, &AMP_PRE_LP1);
+    bq_load(&s->pre_lp2, &AMP_PRE_LP2);
     tone_peaking(&s->tone_bass,   AMP_TONE_BASS_COSW,   AMP_TONE_BASS_ALPHA,   1.0f);
     tone_peaking(&s->tone_mid,    AMP_TONE_MID_COSW,    AMP_TONE_MID_ALPHA,    1.0f);
     tone_peaking(&s->tone_treble, AMP_TONE_TREB_COSW,   AMP_TONE_TREB_ALPHA,   1.0f);
@@ -155,6 +201,8 @@ void Ampsim_reset(Ampsim* a) {
     for (i = 0; i < AMP_CAB_BRIGHT_N; ++i) { s->cab_bright[i].v1 = s->cab_bright[i].v2 = 0.0f; }
     s->reso_low.v1 = s->reso_low.v2 = 0.0f;
     s->reso_high.v1 = s->reso_high.v2 = 0.0f;
+    s->pre_lp1.v1 = s->pre_lp1.v2 = 0.0f;
+    s->pre_lp2.v1 = s->pre_lp2.v2 = 0.0f;
     for (i = 0; i < AMP_CAB_IR_N; ++i) s->ir_delay[i] = 0.0f;
     s->ir_idx = 0;
     s->ir = (s->voice >= 0.5f) ? AMP_CAB_IR_EMO : AMP_CAB_IR_NASH;
@@ -177,20 +225,26 @@ Ampsim* Ampsim_init(void* mem, uint32_t bytes, float sample_rate) {
     s->input = 1.0f;
     s->voice = 0.0f;
     s->gain_base = 0.2f;
-    s->gain = 0.45f;
+    s->gain = 0.35f;
+    s->dry_mix = 0.40f - 0.17f * s->gain;
     s->bass = s->mid = s->treble = 0.50f;
-    s->master = 0.50f;
-    s->level = 0.80f;
+    s->master = 0.55f;
+    s->level = 0.75f;
     s->neve = 1.0f;
     s->cab_tone = 0.5f;
-    s->presence = 1.0f;
+    s->presence = 0.85f;
 
     s->in_g = Ampsim_input_gain(s->input);
-    s->gain_drive = s->gain_base + 2.6f * s->gain;
-    s->power_drive = 0.5f + 1.3f * s->master;
-    s->sag_amt = 0.30f * s->master;
-    s->neve_g = 1.9f;
-    s->level_gain = 0.5f + s->level;
+    /* V2 cold-clipper drive: moderate at low knob (edge-of-breakup at the
+     * 0.25 default), ~15.5x at max -> ~62x preamp total with V1's fixed 4x.
+     * A real preamp stacks moderate per-stage gain instead of one giant
+     * gain stage, and each stage's Miller LP shapes its harmonics. */
+    s->v2_drive = s->gain_base + 1.5f * s->gain + 16.0f * s->gain * s->gain;
+    s->pi_drive = 0.35f + 0.65f * s->master;
+    s->pp_drive = 0.30f + 0.75f * s->master;
+    s->sag_amt = 0.24f * s->master;
+    s->neve_g = 1.2f;
+    s->level_gain = 0.20f + 0.70f * s->level;
 
     /* one-pole time constants (approx tau = 1/(fs*c)); no division */
     s->env_attack_c  = recip_approx(sample_rate * 0.002f);  /* ~2 ms touch */
@@ -215,7 +269,8 @@ void Ampsim_set_param(Ampsim* a, AmpsimParam p, float v) {
             break;
         case AMP_PARAM_GAIN:
             s->gain = v;
-            s->gain_drive = s->gain_base + 2.6f * v;
+            s->v2_drive = s->gain_base + 1.5f * v + 16.0f * v * v;
+            s->dry_mix = 0.40f - 0.17f * v;
             break;
         case AMP_PARAM_VOICE:
         {
@@ -223,31 +278,39 @@ void Ampsim_set_param(Ampsim* a, AmpsimParam p, float v) {
             if (nv != s->voice) {
                 s->voice = nv;
                 s->gain_base = (nv >= 0.5f) ? 0.35f : 0.2f;
-                s->gain_drive = s->gain_base + 2.6f * s->gain;
+                s->v2_drive = s->gain_base + 1.5f * s->gain + 16.0f * s->gain * s->gain;
+                s->dry_mix = 0.40f - 0.17f * s->gain;
                 update_voice_coeffs(a);
             }
             break;
         }
         case AMP_PARAM_BASS:
-            s->bass = v;
-            tone_peaking(&s->tone_bass, AMP_TONE_BASS_COSW, AMP_TONE_BASS_ALPHA, 0.5f + v);
+            if (v != s->bass) {
+                s->bass = v;
+                tone_peaking(&s->tone_bass, AMP_TONE_BASS_COSW, AMP_TONE_BASS_ALPHA, 0.5f + v);
+            }
             break;
         case AMP_PARAM_MID:
-            s->mid = v;
-            tone_peaking(&s->tone_mid, AMP_TONE_MID_COSW, AMP_TONE_MID_ALPHA, 0.5f + v);
+            if (v != s->mid) {
+                s->mid = v;
+                tone_peaking(&s->tone_mid, AMP_TONE_MID_COSW, AMP_TONE_MID_ALPHA, 0.5f + v);
+            }
             break;
         case AMP_PARAM_TREBLE:
-            s->treble = v;
-            tone_peaking(&s->tone_treble, AMP_TONE_TREB_COSW, AMP_TONE_TREB_ALPHA, 0.5f + v);
+            if (v != s->treble) {
+                s->treble = v;
+                tone_peaking(&s->tone_treble, AMP_TONE_TREB_COSW, AMP_TONE_TREB_ALPHA, 0.5f + v);
+            }
             break;
         case AMP_PARAM_MASTER:
             s->master = v;
-            s->power_drive = 0.5f + 1.3f * v;
-            s->sag_amt = 0.30f * v;
+            s->pi_drive = 0.35f + 0.65f * v;
+            s->pp_drive = 0.30f + 0.75f * v;
+            s->sag_amt = 0.24f * v;
             break;
         case AMP_PARAM_LEVEL:
             s->level = v;
-            s->level_gain = 0.5f + v;
+            s->level_gain = 0.20f + 0.70f * v;
             break;
         case AMP_PARAM_NEVE:
             s->neve = v;
@@ -285,11 +348,48 @@ void Ampsim_process(Ampsim* a, float in, float* out) {
     AmpsimState* s = &a->s;
     int i;
 
-    /* 1. input stage: light asymmetric saturation (even + odd harmonics),
-     *    then a DC block (the x^2 term injects DC). */
+    /* 1. V1 input stage: fixed ~4x gain with a light tube polynomial
+     *    (even-harmonic bloom) and a soft asymmetric clip - the first tube
+     *    stage CAN clip on a hot DI, exactly like a real amp's V1. The
+     *    Miller-cap lowpass @ 9 kHz then shapes the harmonics this stage
+     *    generates before V2 multiplies them. */
     float x = in * s->in_g;
-    float x2 = x * x;
-    x = x - 0.07f * x2 * x + 0.02f * x2;
+    {
+        float x2 = x * x;
+        x = (x - 0.05f * x2 * x + 0.015f * x2) * 4.0f;
+        x = clip_ts(x * 0.25f) * 4.0f;
+        x = bq_run(&s->pre_lp1, x);
+    }
+    /* clean tap for the Klon-style mix: the signal that only went through
+     * V1 (it will also pass the tone stack and power amp below) - a clean
+     * amp tone, NOT the raw guitar DI. */
+    float clean = x;
+
+    /* 2. V2 cold clipper (the Gain knob): touch-dynamics envelope rides
+     *    the V1 signal (soft picks stay clean, hard picks break up), then
+     *    the JCM800-style asymmetric clip, then the second Miller LP
+     *    @ 5 kHz - this is the stage that shapes the 3-6 kHz harmonic
+     *    cluster (the "modern/Friedman" push) before the tone stack can
+     *    boost it, and rolls the fizz off above. */
+    {
+        float ax = x < 0.0f ? -x : x;
+        float c = (ax > s->env) ? s->env_attack_c : s->env_release_c;
+        s->env += (ax - s->env) * c;
+        float drive = s->v2_drive * (0.55f + 0.55f * s->env);
+        x = clip_ts(x * drive);
+        x = bq_run(&s->pre_lp2, x);
+    }
+
+    /* 3. Klon-style parallel mix, sample-aligned by construction: the V1
+     *    clean tap and the V2 driven path sum BEFORE the tone network, so
+     *    both branches pass through the same tone stack, power amp and
+     *    cab - the "dry" is a clean amp tone through the power stage, not
+     *    a raw guitar. More clean at low gain (pick attack), distortion
+     *    dominates at max. */
+    x = clean * s->dry_mix + x * (1.0f - s->dry_mix);
+
+    /* 4. DC block: the asymmetric clips inject DC (the x^2 polynomial and
+     *    the 0.5/0.8 knee asymmetry both do); one pole after the mix. */
     {
         float dy = x - s->dc_x1 + 0.995f * s->dc_y1;
         s->dc_x1 = x;
@@ -297,37 +397,31 @@ void Ampsim_process(Ampsim* a, float in, float* out) {
         x = dy;
     }
 
-    /* 2. gain stage with touch dynamics: the clip drive rides the input
-     *    envelope, so soft picks stay clean and hard picks break up. */
-    {
-        float ax = x < 0.0f ? -x : x;
-        float c = (ax > s->env) ? s->env_attack_c : s->env_release_c;
-        s->env += (ax - s->env) * c;
-        float drive = s->gain_drive * (0.65f + 0.45f * s->env);
-        x = clip3(x * drive);
-    }
-
-    /* 3. tone network (interacting bass/mid/treble) */
+    /* 5. tone network (interacting bass/mid/treble) - FMV position: after
+     *    the preamp stages, before the power amp. */
     x = bq_run(&s->tone_bass, x);
     x = bq_run(&s->tone_mid, x);
     x = bq_run(&s->tone_treble, x);
 
-    /* 4. power stage: drive + sag (envelope dips gain on transients) */
+    /* 6. power amp: phase inverter (asymmetric LTP clip) then push-pull
+     *    power tubes (odd-symmetric, NFB-shaped clip) + sag (envelope dips
+     *    the drive on transients - the tube-rectifier "give"). */
     {
         float ax = x < 0.0f ? -x : x;
         float c = (ax > s->sag_env) ? s->sag_attack_c : s->sag_release_c;
         s->sag_env += (ax - s->sag_env) * c;
         float sag = 1.0f - s->sag_amt * s->sag_env;
-        x = clip3(x * s->power_drive * sag);
+        x = clip_ts(x * s->pi_drive);
+        x = clip_pp(x * s->pp_drive * sag);
     }
 
-    /* 5. output transformer: Neve even harmonics + 1073 EQ (brand color).
+    /* 7. output transformer: Neve even harmonics + 1073 EQ (brand color).
      *    The Neve knob is a wet/dry blend around the whole stage. */
     {
         float dry = x;
         float g = s->neve_g;
-        float c1 = clip3(x * g);
-        float c2 = clip3(x * g * 1.6f);
+        float c1 = clip_ts(x * g);
+        float c2 = clip_ts(x * g * 1.6f);
         float sat = c1 + 0.15f * c2 * c2;          /* asymmetric */
         float dy = sat - s->tr_x1 + 0.995f * s->tr_y1;   /* DC block */
         s->tr_x1 = sat;
@@ -337,7 +431,7 @@ void Ampsim_process(Ampsim* a, float in, float* out) {
         x = dry * (1.0f - s->neve) + (y * 0.9f) * s->neve;  /* 1073 trim in wet */
     }
 
-    /* 6. speaker resonance + cabinet voicing */
+    /* 8. speaker resonance + cabinet voicing */
     x = bq_run(&s->reso_low, x);
     {
         float dry = x;
@@ -351,7 +445,7 @@ void Ampsim_process(Ampsim* a, float in, float* out) {
         x = dark * (1.0f - s->cab_tone) + bright * s->cab_tone;
     }
 
-    /* 7. cabinet IR convolution (static 1024-tap miked-cab kernel: mic
+    /* 9. cabinet IR convolution (static 1024-tap miked-cab kernel: mic
      * pickup + speaker-cone resonances + room).  This is the link that
      * makes it read as a miked cab instead of an EQ'd DI - real cones
      * ring and real mics hear a room, and convolution carries that time
@@ -368,6 +462,6 @@ void Ampsim_process(Ampsim* a, float in, float* out) {
         x = acc;
     }
 
-    /* 8. level */
+    /* 10. level */
     *out = x * s->level_gain;
 }
