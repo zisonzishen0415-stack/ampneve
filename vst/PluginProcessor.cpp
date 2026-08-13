@@ -9,13 +9,16 @@ AmpNeveAudioProcessor::createParameterLayout() {
         layout.add(std::make_unique<juce::AudioParameterFloat>(
             id, name, juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), def));
     };
-    /* 6 knobs, two pages x 3, pedal style (boutique amp): */
-    add("gain",   "Gain",   0.45f);
-    add("bass",   "Bass",   0.50f);
-    add("mid",    "Mid",    0.50f);
-    add("treble", "Treble", 0.50f);
-    add("master", "Master", 0.50f);
-    add("level",  "Level",  0.80f);
+    /* 9 knobs, three pages x 3 (tone / amp / voicing), pedal style: */
+    add("gain",     "Gain",     0.45f);
+    add("bass",     "Bass",     0.50f);
+    add("mid",      "Mid",      0.50f);
+    add("treble",   "Treble",   0.50f);
+    add("master",   "Master",   0.50f);
+    add("level",    "Level",    0.80f);
+    add("neve",     "Neve",     1.00f);
+    add("cab",      "Cab",      0.50f);
+    add("presence", "Presence", 1.00f);
     layout.add(std::make_unique<juce::AudioParameterBool>("bypass", "Bypass", false));
     return layout;
 }
@@ -40,13 +43,16 @@ void AmpNeveAudioProcessor::releaseResources() {
 
 void AmpNeveAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) {
     juce::ScopedNoDenormals noDenormals;
-    auto* pGain   = apvts.getRawParameterValue("gain");
-    auto* pBass   = apvts.getRawParameterValue("bass");
-    auto* pMid    = apvts.getRawParameterValue("mid");
-    auto* pTreble = apvts.getRawParameterValue("treble");
-    auto* pMaster = apvts.getRawParameterValue("master");
-    auto* pLevel  = apvts.getRawParameterValue("level");
-    auto* pBypass = apvts.getRawParameterValue("bypass");
+    auto* pGain     = apvts.getRawParameterValue("gain");
+    auto* pBass     = apvts.getRawParameterValue("bass");
+    auto* pMid      = apvts.getRawParameterValue("mid");
+    auto* pTreble   = apvts.getRawParameterValue("treble");
+    auto* pMaster   = apvts.getRawParameterValue("master");
+    auto* pLevel    = apvts.getRawParameterValue("level");
+    auto* pNeve     = apvts.getRawParameterValue("neve");
+    auto* pCab      = apvts.getRawParameterValue("cab");
+    auto* pPresence = apvts.getRawParameterValue("presence");
+    auto* pBypass   = apvts.getRawParameterValue("bypass");
 
     if (core == nullptr) { buffer.clear(); return; }
     if (*pBypass > 0.5f) return;  /* bypass: dry passthrough */
@@ -57,6 +63,9 @@ void AmpNeveAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     Ampsim_set_param(core, AMP_PARAM_TREBLE, *pTreble);
     Ampsim_set_param(core, AMP_PARAM_MASTER, *pMaster);
     Ampsim_set_param(core, AMP_PARAM_LEVEL,  *pLevel);
+    Ampsim_set_param(core, AMP_PARAM_NEVE,    *pNeve);
+    Ampsim_set_param(core, AMP_PARAM_CAB,     *pCab);
+    Ampsim_set_param(core, AMP_PARAM_PRESENCE, *pPresence);
 
     const int numSamples = buffer.getNumSamples();
     if ((int)monoIn.size() < numSamples) monoIn.resize(numSamples);

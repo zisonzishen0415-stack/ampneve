@@ -8,9 +8,9 @@
  *   - block processing: 8 samples L + 8 samples R, channel-interleaved
  *   - ctx[11]/ctx[12] magic shuttle preserved
  *
- * Six knobs across two LineSel pages (mirrors the VST):
- *   P1: Gain / Bass / Mid,  P2: Treble / Master / Level.
- * Cab voicing and Neve coloration are fixed internally (brand sound).
+ * Nine knobs across three LineSel pages (mirrors the VST):
+ *   P1: Bass / Mid / Treble,  P2: Gain / Master / Level,
+ *   P3: Neve / Cab / Presence.
  *
  * Build (needs TI C6000 CGT, see zdl/README.md):
  *   cl6x --c99 --opt_level=2 --opt_for_space=3 -mv6740 --abi=eabi \
@@ -128,27 +128,36 @@ void AMP_DRV_AUDIO_FUNC(unsigned int *ctx)
         return;
     }
 
-    float gain   = amp_param_norm(params[AMPNEVE_GAIN_SLOT],   AMPNEVE_GAIN_DEFAULT_NORM);
-    float bass   = amp_param_norm(params[AMPNEVE_BASS_SLOT],   AMPNEVE_BASS_DEFAULT_NORM);
-    float mid    = amp_param_norm(params[AMPNEVE_MID_SLOT],    AMPNEVE_MID_DEFAULT_NORM);
-    float treble = amp_param_norm(params[AMPNEVE_TREBLE_SLOT], AMPNEVE_TREBLE_DEFAULT_NORM);
-    float master = amp_param_norm(params[AMPNEVE_MASTER_SLOT], AMPNEVE_MASTER_DEFAULT_NORM);
-    float level  = amp_param_norm(params[AMPNEVE_LEVEL_SLOT],  AMPNEVE_LEVEL_DEFAULT_NORM);
+    float bass     = amp_param_norm(params[AMPNEVE_BASS_SLOT],     AMPNEVE_BASS_DEFAULT_NORM);
+    float mid      = amp_param_norm(params[AMPNEVE_MID_SLOT],      AMPNEVE_MID_DEFAULT_NORM);
+    float treble   = amp_param_norm(params[AMPNEVE_TREBLE_SLOT],   AMPNEVE_TREBLE_DEFAULT_NORM);
+    float gain     = amp_param_norm(params[AMPNEVE_GAIN_SLOT],     AMPNEVE_GAIN_DEFAULT_NORM);
+    float master   = amp_param_norm(params[AMPNEVE_MASTER_SLOT],   AMPNEVE_MASTER_DEFAULT_NORM);
+    float level    = amp_param_norm(params[AMPNEVE_LEVEL_SLOT],    AMPNEVE_LEVEL_DEFAULT_NORM);
+    float neve     = amp_param_norm(params[AMPNEVE_NEVE_SLOT],     AMPNEVE_NEVE_DEFAULT_NORM);
+    float cab      = amp_param_norm(params[AMPNEVE_CAB_SLOT],      AMPNEVE_CAB_DEFAULT_NORM);
+    float presence = amp_param_norm(params[AMPNEVE_PRESENCE_SLOT], AMPNEVE_PRESENCE_DEFAULT_NORM);
 
     Ampsim *aL = (Ampsim *)&st->memL;
     Ampsim *aR = (Ampsim *)&st->memR;
-    Ampsim_set_param(aL, AMP_PARAM_GAIN,   gain);
-    Ampsim_set_param(aL, AMP_PARAM_BASS,   bass);
-    Ampsim_set_param(aL, AMP_PARAM_MID,    mid);
-    Ampsim_set_param(aL, AMP_PARAM_TREBLE, treble);
-    Ampsim_set_param(aL, AMP_PARAM_MASTER, master);
-    Ampsim_set_param(aL, AMP_PARAM_LEVEL,  level);
-    Ampsim_set_param(aR, AMP_PARAM_GAIN,   gain);
-    Ampsim_set_param(aR, AMP_PARAM_BASS,   bass);
-    Ampsim_set_param(aR, AMP_PARAM_MID,    mid);
-    Ampsim_set_param(aR, AMP_PARAM_TREBLE, treble);
-    Ampsim_set_param(aR, AMP_PARAM_MASTER, master);
-    Ampsim_set_param(aR, AMP_PARAM_LEVEL,  level);
+    Ampsim_set_param(aL, AMP_PARAM_BASS,     bass);
+    Ampsim_set_param(aL, AMP_PARAM_MID,      mid);
+    Ampsim_set_param(aL, AMP_PARAM_TREBLE,   treble);
+    Ampsim_set_param(aL, AMP_PARAM_GAIN,     gain);
+    Ampsim_set_param(aL, AMP_PARAM_MASTER,   master);
+    Ampsim_set_param(aL, AMP_PARAM_LEVEL,    level);
+    Ampsim_set_param(aL, AMP_PARAM_NEVE,     neve);
+    Ampsim_set_param(aL, AMP_PARAM_CAB,      cab);
+    Ampsim_set_param(aL, AMP_PARAM_PRESENCE, presence);
+    Ampsim_set_param(aR, AMP_PARAM_BASS,     bass);
+    Ampsim_set_param(aR, AMP_PARAM_MID,      mid);
+    Ampsim_set_param(aR, AMP_PARAM_TREBLE,   treble);
+    Ampsim_set_param(aR, AMP_PARAM_GAIN,     gain);
+    Ampsim_set_param(aR, AMP_PARAM_MASTER,   master);
+    Ampsim_set_param(aR, AMP_PARAM_LEVEL,    level);
+    Ampsim_set_param(aR, AMP_PARAM_NEVE,     neve);
+    Ampsim_set_param(aR, AMP_PARAM_CAB,      cab);
+    Ampsim_set_param(aR, AMP_PARAM_PRESENCE, presence);
 
     int i;
     for (i = 0; i < 8; i++) {

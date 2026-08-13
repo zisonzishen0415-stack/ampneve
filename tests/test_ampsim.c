@@ -180,7 +180,49 @@ int main(void) {
         CHECK(ratio > 1.2f && ratio < 2.9f, "loud input compresses (ratio < linear 3.33)");
     }
 
-    /* 9. init rejects too-small buffer */
+    /* 9. neve knob: bypass (0) vs full color (1) differ */
+    {
+        Ampsim_set_param(a, AMP_PARAM_GAIN, 0.4f);
+        Ampsim_set_param(a, AMP_PARAM_BASS, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_MID, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_TREBLE, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_MASTER, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_LEVEL, 0.8f);
+        Ampsim_set_param(a, AMP_PARAM_NEVE, 0.0f);
+        Ampsim_reset(a);
+        float r_neve_off = run_rms(a, 700.0f, 0.15f, 32768u, 16384u);
+        Ampsim_set_param(a, AMP_PARAM_NEVE, 1.0f);
+        Ampsim_reset(a);
+        float r_neve_on = run_rms(a, 700.0f, 0.15f, 32768u, 16384u);
+        CHECK(r_neve_on > 1.03f * r_neve_off, "neve knob changes coloration");
+    }
+
+    /* 10. cab knob: dark (0) vs bright (1) differ at 6 kHz */
+    {
+        Ampsim_set_param(a, AMP_PARAM_NEVE, 1.0f);
+        Ampsim_set_param(a, AMP_PARAM_PRESENCE, 1.0f);
+        Ampsim_set_param(a, AMP_PARAM_CAB, 0.0f);
+        Ampsim_reset(a);
+        float r_cab_dark = run_rms(a, 6000.0f, 0.06f, 32768u, 16384u);
+        Ampsim_set_param(a, AMP_PARAM_CAB, 1.0f);
+        Ampsim_reset(a);
+        float r_cab_bright = run_rms(a, 6000.0f, 0.06f, 32768u, 16384u);
+        CHECK(r_cab_bright > 1.03f * r_cab_dark, "cab knob shifts high-end voicing");
+    }
+
+    /* 11. presence knob: off (0) vs full (1) differ at 3.5 kHz */
+    {
+        Ampsim_set_param(a, AMP_PARAM_CAB, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_PRESENCE, 0.0f);
+        Ampsim_reset(a);
+        float r_pres_off = run_rms(a, 3500.0f, 0.06f, 32768u, 16384u);
+        Ampsim_set_param(a, AMP_PARAM_PRESENCE, 1.0f);
+        Ampsim_reset(a);
+        float r_pres_on = run_rms(a, 3500.0f, 0.06f, 32768u, 16384u);
+        CHECK(r_pres_on > 1.03f * r_pres_off, "presence knob boosts speaker resonance");
+    }
+
+    /* 12. init rejects too-small buffer */
     CHECK(Ampsim_init(mem, need - 1u, 44100.0f) == NULL, "rejects small buffer");
 
     free(mem);

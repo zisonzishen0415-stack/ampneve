@@ -44,8 +44,8 @@ independent means:
 - **Nashville session voice**: tight low end (105 Hz resonance +2.5 dB),
   forward ~850 Hz mid, glassy top (full 4th-order 10/12 kHz lowpass) -
   the clean/edge platform studio country and modern shoegaze players use.
-- **6 knobs, two pages x 3** (pedal style): P1 Gain/Bass/Mid,
-  P2 Treble/Master/Level.
+- **9 knobs, three pages x 3** (pedal style): P1 Bass/Mid/Treble,
+  P2 Gain/Master/Level, P3 Neve/Cab/Presence.
 - **Touch dynamics**: the gain stage's clip drive rides the input envelope,
   so soft picks stay clean and hard picks break up - a real amp responds
   to the hand, not a fixed transfer curve.
@@ -54,8 +54,9 @@ independent means:
 - **Cabinet voicing**: speaker resonance (105 Hz + 3.5 kHz) plus a fixed
   filter bank (90 Hz HP, 180 Hz body, 3.2 kHz presence, 7-9 kHz rolloff) -
   no runtime coefficient math.
-- **Neve coloration (fixed)**: asymmetric saturation (even harmonics) +
-  1073-style EQ (110 Hz shelf, 700 Hz mid, 12 kHz shelf) + DC block.
+- **Neve coloration (knob)**: asymmetric saturation (even harmonics) +
+  1073-style EQ (110 Hz shelf, 700 Hz mid, 12 kHz shelf) + DC block, blended
+  wet/dry by the Neve knob (0 = bypass).
 
 ## Build
 
@@ -73,7 +74,7 @@ ctest --test-dir build
 - `test_ampsim` - numeric behavior + stability
 - `tools/check_zdl_safe.py` - static ZDL-safety audit of the core
 - `tools/ampsim_render` - offline renderer (same code path as VST/ZDL):
-  `ampsim_render in.wav out.wav [gain] [bass] [mid] [treble] [master] [level]`
+  `ampsim_render in.wav out.wav [gain] [bass] [mid] [treble] [master] [level] [neve] [cab] [presence]`
 - VST3: `build/vst/AmpNeveVST_artefacts/Release/VST3/AmpNeve.vst3`
 
 ## ZDL

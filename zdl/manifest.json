@@ -1,6 +1,6 @@
 {
   "effect_name": "AmpNeve",
-  "comment": "Custom boutique amp + cabinet + Neve-style coloration for the Zoom MultiStomp. Original DSP (not a stock clone): input stage -> gain stage with touch dynamics (Gain) -> tone network Bass/Mid/Treble -> power stage with sag (Master) -> Neve transformer even harmonics + 1073-style EQ -> speaker resonance + cabinet -> Level. Six knobs, two pages x three, mirroring the VST.",
+  "comment": "Custom boutique amp + cabinet + Neve-style coloration for the Zoom MultiStomp. Original DSP (not a stock clone): input stage -> gain stage with touch dynamics (Gain) -> tone network Bass/Mid/Treble -> power stage with sag (Master) -> Neve transformer even harmonics + 1073-style EQ (Neve, wet/dry) -> speaker resonance + cabinet (Cab dark..bright, Presence) -> Level. Nine knobs, three pages x three, mirroring the VST: P1 Bass/Mid/Treble, P2 Gain/Master/Level, P3 Neve/Cab/Presence.",
   "audio_func_name": "Fx_AMP_AmpNeve",
   "gid": 4,
   "gid_comment": "0x04 = AMP category. SONAME prefix becomes ZDL_AMP_.",
@@ -10,17 +10,6 @@
   "flags_byte": 1,
   "params": [
     {
-      "name": "Gain",
-      "type": "knob",
-      "max": 100,
-      "default": 45,
-      "scale": "linear",
-      "audio_min": 0.0,
-      "audio_max": 1.0,
-      "audio_default": 0.45,
-      "comment": "Preamp gain + touch-dynamics base (soft = clean, hard = crunch)."
-    },
-    {
       "name": "Bass",
       "type": "knob",
       "max": 100,
@@ -29,7 +18,7 @@
       "audio_min": 0.0,
       "audio_max": 1.0,
       "audio_default": 0.5,
-      "comment": "Tone-network low control (0.5 = flat)."
+      "comment": "Tone-network low control, tight 140 Hz (0.5 = flat)."
     },
     {
       "name": "Mid",
@@ -40,7 +29,7 @@
       "audio_min": 0.0,
       "audio_max": 1.0,
       "audio_default": 0.5,
-      "comment": "Tone-network mid control (0.5 = flat)."
+      "comment": "Tone-network mid presence at 850 Hz (0.5 = flat)."
     },
     {
       "name": "Treble",
@@ -51,7 +40,18 @@
       "audio_min": 0.0,
       "audio_max": 1.0,
       "audio_default": 0.5,
-      "comment": "Tone-network high control (0.5 = flat)."
+      "comment": "Tone-network high control at 5 kHz (0.5 = flat)."
+    },
+    {
+      "name": "Gain",
+      "type": "knob",
+      "max": 100,
+      "default": 45,
+      "scale": "linear",
+      "audio_min": 0.0,
+      "audio_max": 1.0,
+      "audio_default": 0.45,
+      "comment": "Preamp gain + touch-dynamics base (soft = clean, hard = crunch)."
     },
     {
       "name": "Master",
@@ -74,6 +74,39 @@
       "audio_max": 1.0,
       "audio_default": 0.8,
       "comment": "Output level (core maps 0..1 to 0.5..1.5 gain)."
+    },
+    {
+      "name": "Neve",
+      "type": "knob",
+      "max": 100,
+      "default": 100,
+      "scale": "linear",
+      "audio_min": 0.0,
+      "audio_max": 1.0,
+      "audio_default": 1.0,
+      "comment": "Neve coloration amount: transformer even harmonics + 1073 EQ wet/dry (0 = bypass)."
+    },
+    {
+      "name": "Cab",
+      "type": "knob",
+      "max": 100,
+      "default": 50,
+      "scale": "linear",
+      "audio_min": 0.0,
+      "audio_max": 1.0,
+      "audio_default": 0.5,
+      "comment": "Cabinet voicing dark(0)..bright(1)."
+    },
+    {
+      "name": "Presence",
+      "type": "knob",
+      "max": 100,
+      "default": 100,
+      "scale": "linear",
+      "audio_min": 0.0,
+      "audio_max": 1.0,
+      "audio_default": 1.0,
+      "comment": "Speaker 3.5 kHz resonance amount (0 = off, 1 = full)."
     }
   ],
   "audio_nop": false

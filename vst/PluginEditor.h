@@ -4,7 +4,8 @@
 
 class AmpNeveAudioProcessor;
 
-/* Pedal-style two-page x three-knob editor (G1on / MS-series look). */
+/* Pedal-style three-page x three-knob editor (G1on / MS-series look):
+ * P1 Bass/Mid/Treble, P2 Gain/Master/Level, P3 Neve/Cab/Presence. */
 class AmpNeveAudioProcessorEditor : public juce::AudioProcessorEditor,
                                     public juce::Timer {
 public:
@@ -15,8 +16,8 @@ public:
     void resized() override;
     void timerCallback() override;
 
-    static const char* ids[2][3];
-    static const char* names[2][3];
+    static const char* ids[3][3];
+    static const char* names[3][3];
 
 private:
     void setPage(int page);

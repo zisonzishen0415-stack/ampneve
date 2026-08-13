@@ -26,13 +26,15 @@ public:
     }
 };
 
-const char* AmpNeveAudioProcessorEditor::ids[2][3] = {
-    {"gain", "bass", "mid"},
-    {"treble", "master", "level"}
+const char* AmpNeveAudioProcessorEditor::ids[3][3] = {
+    {"bass", "mid", "treble"},
+    {"gain", "master", "level"},
+    {"neve", "cab", "presence"}
 };
-const char* AmpNeveAudioProcessorEditor::names[2][3] = {
-    {"Gain", "Bass", "Mid"},
-    {"Treble", "Master", "Level"}
+const char* AmpNeveAudioProcessorEditor::names[3][3] = {
+    {"Bass", "Mid", "Treble"},
+    {"Gain", "Master", "Level"},
+    {"Neve", "Cab", "Presence"}
 };
 
 static const juce::Colour lcdBg(0xff0d2239);     /* deep blue LCD backlight */
@@ -44,7 +46,7 @@ static const juce::Colour bezel(0xff4a4e57);     /* screen bezel */
 AmpNeveAudioProcessorEditor::AmpNeveAudioProcessorEditor(AmpNeveAudioProcessor& p)
     : AudioProcessorEditor(&p), processor(p) {
     pageButton.setButtonText("PAGE");
-    pageButton.onClick = [this] { setPage((currentPage + 1) % 2); };
+    pageButton.onClick = [this] { setPage((currentPage + 1) % 3); };
     addAndMakeVisible(pageButton);
 
     bypassButton.setButtonText("BYPASS");

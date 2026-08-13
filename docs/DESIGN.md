@@ -67,19 +67,19 @@ and the struct arrays are sized from the same constants.
 | Speaker resonance | cabinet "bark" at 105 Hz and cone presence at ~3.5 kHz | real cab IRs |
 | Neve coloration | final console sheen (brand) | 1073 |
 
-## Parameters (6 knobs, two pages)
+## Parameters (9 knobs, three pages)
 
-| Knob | Range | Maps to |
-|---|---|---|
-| P1 Gain | 0..1 | preamp gain + clip level (touch dynamics base) |
-| P1 Bass | 0..1 | tone-network low shelf (-..+ around center) |
-| P1 Mid | 0..1 | tone-network mid peaking |
-| P2 Treble | 0..1 | tone-network high shelf |
-| P2 Master | 0..1 | power-stage drive + sag amount |
-| P2 Level | 0..1 | output (0.5..1.5 gain) |
-
-Neve coloration is fixed internally (brand sound) in v1; a Voice/Neve knob
-may return in v2 with 1..5 voicing presets.
+| Page | Knob | Range | Maps to |
+|---|---|---|---|
+| P1 | Bass | 0..1 | tone-network low, 140 Hz (0.5 flat) |
+| P1 | Mid | 0..1 | tone-network mid presence, 850 Hz (0.5 flat) |
+| P1 | Treble | 0..1 | tone-network high, 5 kHz (0.5 flat) |
+| P2 | Gain | 0..1 | preamp gain + clip level (touch dynamics base) |
+| P2 | Master | 0..1 | power-stage drive + sag amount |
+| P2 | Level | 0..1 | output (0.5..1.5 gain) |
+| P3 | Neve | 0..1 | Neve coloration wet/dry (0 = bypass) |
+| P3 | Cab | 0..1 | cabinet voicing dark..bright |
+| P3 | Presence | 0..1 | speaker 3.5 kHz resonance amount |
 
 ## ZDL-safe implementation notes
 
@@ -95,8 +95,10 @@ may return in v2 with 1..5 voicing presets.
 
 ## Roadmap
 
-- v1 (this pass): multi-stage gain + touch dynamics + tone network +
-  power sag + speaker resonance; 6-knob Gain/Bass/Mid/Treble/Master/Level.
+- v1: multi-stage gain + touch dynamics + tone network + power sag +
+  speaker resonance; 6-knob Gain/Bass/Mid/Treble/Master/Level.
+- v2a: Nashville session voicing (see above) + cab lowpass bug fix.
+- v2b: 9 knobs / three pages - Neve, Cab and Presence exposed as knobs.
 - v2 (future): Voice 1..5 voicing presets (Clean American / British
   crunch / Dumble-ish / High-gain / Boutique clean), dual-mic cabinet
   (dynamic close + condenser room), presence/depth.

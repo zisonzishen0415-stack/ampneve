@@ -31,6 +31,7 @@ typedef struct {
     float sag_attack_c, sag_release_c;
 
     /* output transformer (Neve brand color) */
+    float neve;                 /* coloration amount, 0..1 (0 = bypass) */
     float neve_g;
     float tr_x1, tr_y1;         /* transformer DC block */
     Bq neve_bq[3];
@@ -39,7 +40,8 @@ typedef struct {
     Bq reso_low, reso_high;
     Bq cab_dark[AMP_CAB_DARK_N];
     Bq cab_bright[AMP_CAB_BRIGHT_N];
-    float cab_tone;             /* fixed dark/bright blend */
+    float cab_tone;             /* dark..bright blend (0..1) */
+    float presence;             /* speaker 3.5kHz resonance amount, 0..1 */
 
     /* level */
     float level_gain;
@@ -145,13 +147,15 @@ Ampsim* Ampsim_init(void* mem, uint32_t bytes, float sample_rate) {
     s->bass = s->mid = s->treble = 0.50f;
     s->master = 0.50f;
     s->level = 0.80f;
+    s->neve = 1.0f;
+    s->cab_tone = 0.5f;
+    s->presence = 1.0f;
 
     s->in_g = 1.25f;
     s->gain_drive = 0.2f + 2.6f * s->gain;
     s->power_drive = 0.5f + 1.3f * s->master;
     s->sag_amt = 0.30f * s->master;
     s->neve_g = 1.9f;
-    s->cab_tone = 0.5f;
     s->level_gain = 0.5f + s->level;
 
     /* one-pole time constants (approx tau = 1/(fs*c)); no division */
@@ -196,6 +200,15 @@ void Ampsim_set_param(Ampsim* a, AmpsimParam p, float v) {
             s->level = v;
             s->level_gain = 0.5f + v;
             break;
+        case AMP_PARAM_NEVE:
+            s->neve = v;
+            break;
+        case AMP_PARAM_CAB:
+            s->cab_tone = v;
+            break;
+        case AMP_PARAM_PRESENCE:
+            s->presence = v;
+            break;
     }
 }
 
@@ -209,6 +222,9 @@ float Ampsim_get_param(const Ampsim* a, AmpsimParam p) {
         case AMP_PARAM_TREBLE: return s->treble;
         case AMP_PARAM_MASTER: return s->master;
         case AMP_PARAM_LEVEL:  return s->level;
+        case AMP_PARAM_NEVE:    return s->neve;
+        case AMP_PARAM_CAB:     return s->cab_tone;
+        case AMP_PARAM_PRESENCE: return s->presence;
     }
     return 0.0f;
 }
@@ -254,8 +270,10 @@ void Ampsim_process(Ampsim* a, float in, float* out) {
         x = clip3(x * s->power_drive * sag);
     }
 
-    /* 5. output transformer: Neve even harmonics + 1073 EQ (brand color) */
+    /* 5. output transformer: Neve even harmonics + 1073 EQ (brand color).
+     *    The Neve knob is a wet/dry blend around the whole stage. */
     {
+        float dry = x;
         float g = s->neve_g;
         float c1 = clip3(x * g);
         float c2 = clip3(x * g * 1.6f);
@@ -265,12 +283,16 @@ void Ampsim_process(Ampsim* a, float in, float* out) {
         s->tr_y1 = dy;
         float y = dy;
         for (i = 0; i < 3; ++i) y = bq_run(&s->neve_bq[i], y);
-        x = y * 0.9f;                              /* 1073 EQ level trim */
+        x = dry * (1.0f - s->neve) + (y * 0.9f) * s->neve;  /* 1073 trim in wet */
     }
 
     /* 6. speaker resonance + cabinet voicing */
     x = bq_run(&s->reso_low, x);
-    x = bq_run(&s->reso_high, x);
+    {
+        float dry = x;
+        float wet = bq_run(&s->reso_high, dry);
+        x = dry * (1.0f - s->presence) + wet * s->presence;
+    }
     {
         float dark = x, bright = x;
         for (i = 0; i < 4; ++i) dark = bq_run(&s->cab_dark[i], dark);
