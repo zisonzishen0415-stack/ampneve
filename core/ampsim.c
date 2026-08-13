@@ -43,7 +43,9 @@ typedef struct {
     Bq reso_low, reso_high;
     Bq cab_dark[AMP_CAB_DARK_N];
     Bq cab_bright[AMP_CAB_BRIGHT_N];
-    Bq mic[AMP_MIC_N];          /* SM57-style mic pickup (fixed) */
+    const float* ir;             /* active cabinet IR (static const) */
+    float ir_delay[AMP_CAB_IR_N]; /* rolling convolution delay buffer */
+    int ir_idx;                   /* write position into ir_delay */
     float cab_tone;             /* dark..bright blend (0..1) */
     float presence;             /* speaker 3.5kHz resonance amount, 0..1 */
 
@@ -133,8 +135,7 @@ static void update_voice_coeffs(Ampsim* a) {
         bq_load(&s->cab_bright[i], emo ? &AMP_CAB_BRIGHT_EMO[i] : &AMP_CAB_BRIGHT[i]);
     bq_load(&s->reso_low, &AMP_RESO_LOW);
     bq_load(&s->reso_high, &AMP_RESO_HIGH);
-    for (i = 0; i < AMP_MIC_N; ++i)
-        bq_load(&s->mic[i], emo ? &AMP_MIC_EMO[i] : &AMP_MIC[i]);
+    s->ir = emo ? AMP_CAB_IR_EMO : AMP_CAB_IR_NASH;
 }
 
 static void update_stage_coeffs(Ampsim* a) {
@@ -154,7 +155,9 @@ void Ampsim_reset(Ampsim* a) {
     for (i = 0; i < AMP_CAB_BRIGHT_N; ++i) { s->cab_bright[i].v1 = s->cab_bright[i].v2 = 0.0f; }
     s->reso_low.v1 = s->reso_low.v2 = 0.0f;
     s->reso_high.v1 = s->reso_high.v2 = 0.0f;
-    for (i = 0; i < AMP_MIC_N; ++i) { s->mic[i].v1 = s->mic[i].v2 = 0.0f; }
+    for (i = 0; i < AMP_CAB_IR_N; ++i) s->ir_delay[i] = 0.0f;
+    s->ir_idx = 0;
+    s->ir = (s->voice >= 0.5f) ? AMP_CAB_IR_EMO : AMP_CAB_IR_NASH;
     s->tone_bass.v1 = s->tone_bass.v2 = 0.0f;
     s->tone_mid.v1 = s->tone_mid.v2 = 0.0f;
     s->tone_treble.v1 = s->tone_treble.v2 = 0.0f;
@@ -348,9 +351,22 @@ void Ampsim_process(Ampsim* a, float in, float* out) {
         x = dark * (1.0f - s->cab_tone) + bright * s->cab_tone;
     }
 
-    /* 7. mic pickup (SM57-ish, fixed): the last link that makes it read
-     * as a miked cab instead of an EQ'd DI. */
-    for (i = 0; i < AMP_MIC_N; ++i) x = bq_run(&s->mic[i], x);
+    /* 7. cabinet IR convolution (static 1024-tap miked-cab kernel: mic
+     * pickup + speaker-cone resonances + room).  This is the link that
+     * makes it read as a miked cab instead of an EQ'd DI - real cones
+     * ring and real mics hear a room, and convolution carries that time
+     * structure.  No division, no modulo: ring-buffer wrap by branch. */
+    {
+        int idx = s->ir_idx;
+        float acc = 0.0f;
+        s->ir_delay[idx] = x;
+        for (i = 0; i < AMP_CAB_IR_N; ++i) {
+            acc += s->ir_delay[idx] * s->ir[i];
+            idx = (idx == 0) ? (AMP_CAB_IR_N - 1) : (idx - 1);
+        }
+        s->ir_idx = (s->ir_idx == (AMP_CAB_IR_N - 1)) ? 0 : (s->ir_idx + 1);
+        x = acc;
+    }
 
     /* 8. level */
     *out = x * s->level_gain;

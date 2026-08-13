@@ -8,15 +8,18 @@
  *   -> power stage (softer clip + sag compression)
  *   -> output transformer (Neve even harmonics + 1073 EQ, brand color)
  *   -> speaker resonance + cabinet voicing (dark..bright)
- *   -> mic pickup (SM57-style, fixed)
+ *   -> cabinet IR convolution (1024-tap miked-cab kernel: mic
+ *      pickup + speaker-cone resonances + room, static per voice)
  *   -> level
  *
  * Voice switch (0 = Nashville session, 1 = Emo/Edge): swaps the Neve EQ,
- * cab voicing and mic character, and raises the gain-stage base so edge
- * breakup arrives earlier - one pedal-style toggle, no IRs.
+ * cab voicing and the cabinet IR, and raises the gain-stage base so edge
+ * breakup arrives earlier - one pedal-style toggle, per-voice static IRs.
  *
  * ZDL-safe: no heap (caller memory), no double, no sinf/cosf/powf/logf,
- * no division in the audio path, no large writable statics. Filter
+ * no division in the audio path, no large writable statics (the cabinet
+ * IR is a static const kernel; only its rolling delay buffer is state).
+ * Filter
  * coefficients are precomputed constants or updated at set_param time with
  * multiply-add + a fixed-point reciprocal approximation (no math library).
  */

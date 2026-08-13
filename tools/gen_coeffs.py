@@ -4,6 +4,106 @@ FS = 44100.0
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.normpath(os.path.join(HERE, '..', 'core', 'ampsim_coeffs.h'))
 
+# --- cabinet IR synthesis (static convolution kernel, replaces the old mic
+#     biquads).  The IR is the miked-cab impulse response: the old mic
+#     pickup's exact HP+LP response as the causal base, plus speaker-cone
+#     modal resonances (damped ringing) and a little room scatter.  Real
+#     cones ring and real mics hear a room - that time structure is what
+#     makes the amp read as a miked cab instead of an EQ'd DI.
+#     1024 taps @44.1k = 23.2 ms.  Tune the knobs below, then run
+#     `python tools/gen_coeffs.py` to regenerate core/ampsim_coeffs.h. ---
+CAB_IR_N = 1024            # taps (state: 1024 floats/channel of delay)
+CAB_IR_INIT_DELAY = 29     # ~0.66 ms speaker-to-mic flight time
+CAB_IR_ROOM_LEVEL = 0.04   # room scatter level (0 = off)
+CAB_IR_ROOM_TAU = 0.012    # room tail decay, seconds
+CAB_IR_SEED_NASH = 12345   # deterministic scatter seeds (stable builds)
+CAB_IR_SEED_EMO = 67890
+# cone modal resonances: (f0 Hz, tau s, boost dB at f0)
+CAB_IR_RESON_NASH = [
+    (150.0, 0.006, 3.0),   # cab thump
+    (350.0, 0.005, 2.0),   # low-mid body
+    (900.0, 0.004, 2.5),   # cone bloom
+    (1800.0, 0.0035, 1.5), # upper bloom
+    (2800.0, 0.0028, 1.0), # edge ring
+]
+CAB_IR_RESON_EMO = [
+    (160.0, 0.006, 3.0),
+    (420.0, 0.005, 2.5),
+    (900.0, 0.004, 3.0),
+    (1700.0, 0.0032, 1.5),
+    (2600.0, 0.0026, 1.0),
+]
+
+def _ba(c):
+    return np.array([c[0], c[1], c[2]]), np.array([1.0, c[3], c[4]])
+
+def _cascade(sections):
+    b = np.array([1.0]); a = np.array([1.0])
+    for c in sections:
+        bk, ak = _ba(c)
+        b = np.convolve(b, bk)
+        a = np.convolve(a, ak)
+    return b, a
+
+def _chain_mag(sections, nfft):
+    f = np.linspace(0.0, FS / 2.0, nfft)
+    z = np.exp(-1j * 2.0 * np.pi * f / FS)
+    H = np.ones(nfft, dtype=complex)
+    for c in sections:
+        b, a = _ba(c)
+        H *= np.polyval(b, z) / np.polyval(a, z)
+    return f, np.abs(H)
+
+def _res_amp(f0, tau, db, m0):
+    # spectral peak of A*exp(-t/tau)*sin(2*pi*f0*t) is ~ A*tau*fs/2,
+    # so solve for the amplitude that adds a +db bump on top of m0.
+    return m0 * (10.0 ** (db / 20.0) - 1.0) / (tau * FS / 2.0)
+
+def synth_cab_ir(mic_sections, n, init_delay, resonances, room_level, room_tau, seed):
+    from scipy.signal import lfilter
+    taps = n - init_delay
+    b, a = _cascade(mic_sections)
+    imp = np.zeros(taps); imp[0] = 1.0
+    base = lfilter(b, a, imp)               # exact old-mic response, causal phase
+    t = np.arange(taps) / FS
+    ir = base.copy()
+    Xb = np.fft.rfft(base, n=4096)
+    fr = np.fft.rfftfreq(4096, 1.0 / FS)
+    for f0, tau, db in resonances:
+        m0 = np.abs(Xb[np.argmin(np.abs(fr - f0))])
+        ir += _res_amp(f0, tau, db, m0) * np.exp(-t / tau) * np.sin(2.0 * np.pi * f0 * t + 0.7)
+    rng = np.random.default_rng(seed)
+    noise = rng.standard_normal(taps + 8192)
+    shaped = lfilter(b, a, noise)           # room scatter shaped by the mic EQ
+    onset = int(0.0008 * FS)
+    tail = np.zeros(taps)
+    tail[onset:] = np.exp(-t[onset:] / room_tau)
+    ir += room_level * shaped[:taps] * tail
+    w = np.ones(taps)                        # end window: no truncation click
+    nw = min(int(0.004 * FS), taps // 4)
+    if nw > 0:
+        w[-nw:] = np.linspace(1.0, 0.0, nw) ** 2
+    ir *= w
+    # loudness match to the mic chain in the core guitar band (300..3000 Hz)
+    X = np.fft.rfft(ir, n=8192)
+    fr2 = np.fft.rfftfreq(8192, 1.0 / FS)
+    sel = (fr2 >= 300.0) & (fr2 <= 3000.0)
+    ir_mid = np.mean(np.abs(X[sel]))
+    f2, mag = _chain_mag(mic_sections, 2048)
+    mic_mid = np.mean(mag[(f2 >= 300.0) & (f2 <= 3000.0)])
+    ir *= mic_mid / ir_mid
+    out = np.zeros(n)
+    out[init_delay:] = ir
+    return out
+
+def fmt_ir(name, arr):
+    L = [f'static const float {name}[AMP_CAB_IR_N] = {{']
+    for i in range(0, len(arr), 8):
+        row = ', '.join(f'{v:.9f}f' for v in arr[i:i+8])
+        L.append('    ' + row + (',' if i + 8 < len(arr) else ''))
+    L.append('};')
+    return '\n'.join(L)
+
 def peaking(fs, f0, q, gain_db):
     A = 10.0 ** (gain_db / 40.0)
     w0 = 2.0 * np.pi * f0 / fs
@@ -70,16 +170,7 @@ C.append('};\n#define AMP_CAB_BRIGHT_N 5\n\n')
 reso_low = peaking(FS, 105.0, 1.2, 2.5)
 reso_hi = peaking(FS, 3500.0, 1.6, 2.0)
 
-# --- mic pickup (fixed, after cab): SM57-on-1x12 character - mic HP,
-#     presence bite at 5.8kHz, steep top rolloff. This is the "?????"
-#     stage: without it the amp reads as EQ'd DI, not a miked cab. ---
-mic_hp = butter(FS, 70.0, 2, 'highpass')[0]
-mic_pres = peaking(FS, 5800.0, 1.0, 3.0)
-mic_lp = butter(FS, 11000.0, 2, 'lowpass')[0]
-C.append('/* mic pickup (SM57-ish, fixed after cab) */\n')
-C.append('static const AmpBiquad AMP_MIC[] = {\n')
-C.append(fmt('hp70', mic_hp)); C.append(fmt('pres5800 +3dB', mic_pres)); C.append(fmt('lp11000 2nd', mic_lp))
-C.append('};\n#define AMP_MIC_N 3\n\n')
+
 # --- EMO / EDGE voice (VOICE=1): midwest-emo / math-rock / post-punk platform.
 #     Same head, but: earlier breakup (handled in core via gain base), more
 #     400-800 Hz body (no de-honk), warmer SM57 top, less Neve sheen. ---
@@ -112,13 +203,22 @@ C.append(fmt('pres4800 +5dB', pres_bright_emo))
 for i,b in enumerate(lp_bright_emo): C.append(fmt(f'lp11000 4th #{i}', b))
 C.append('};\n#define AMP_CAB_BRIGHT_EMO_N 5\n\n')
 
-mic_emo_hp = butter(FS, 70.0, 2, 'highpass')[0]
-mic_emo_pres = peaking(FS, 5500.0, 1.0, 2.0)
-mic_emo_lp = butter(FS, 10000.0, 2, 'lowpass')[0]
-C.append('/* mic EMO (VOICE=1): a touch less bite, warmer */\n')
-C.append('static const AmpBiquad AMP_MIC_EMO[] = {\n')
-C.append(fmt('hp70', mic_emo_hp)); C.append(fmt('pres5500 +2dB', mic_emo_pres)); C.append(fmt('lp10000 2nd', mic_emo_lp))
-C.append('};\n#define AMP_MIC_EMO_N 3\n\n')
+# --- cabinet IR (static convolution kernel, replaces the old mic biquads).
+#     The cab voicing chains above still run in front, so the Cab knob
+#     keeps working; the IR carries the miked-cab character after them. ---
+mic_nash_ir = butter(FS, 70.0, 2, 'highpass') + [peaking(FS, 5800.0, 1.0, 3.0)] + butter(FS, 11000.0, 2, 'lowpass')
+mic_emo_ir = butter(FS, 70.0, 2, 'highpass') + [peaking(FS, 5500.0, 1.0, 2.0)] + butter(FS, 10000.0, 2, 'lowpass')
+ir_nash = synth_cab_ir(mic_nash_ir, CAB_IR_N, CAB_IR_INIT_DELAY, CAB_IR_RESON_NASH,
+                       CAB_IR_ROOM_LEVEL, CAB_IR_ROOM_TAU, CAB_IR_SEED_NASH)
+ir_emo = synth_cab_ir(mic_emo_ir, CAB_IR_N, CAB_IR_INIT_DELAY, CAB_IR_RESON_EMO,
+                      CAB_IR_ROOM_LEVEL, CAB_IR_ROOM_TAU, CAB_IR_SEED_EMO)
+C.append('#define AMP_CAB_IR_N 1024\n\n')
+C.append('/* cabinet IR - Nashville (VOICE=0): tight lows, glassy top, drier room. */\n')
+C.append(fmt_ir('AMP_CAB_IR_NASH', ir_nash) + '\n')
+C.append('/* cabinet IR - Emo/Edge (VOICE=1): more mid body, warmer top. */\n')
+C.append(fmt_ir('AMP_CAB_IR_EMO', ir_emo) + '\n')
+
+
 C.append('/* speaker resonance (fixed) */\n')
 C.append('static const AmpBiquad AMP_RESO_LOW = ')
 C.append('{ ' + ', '.join(f'{v:.9f}f' for v in reso_low) + ' };\n')

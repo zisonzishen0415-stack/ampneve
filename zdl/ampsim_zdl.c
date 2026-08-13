@@ -2,8 +2,8 @@
  * ampsim_zdl.c -- AmpNeve for the Zoom MultiStomp (ZDL).
  *
  * Wraps the core (core/ampsim.c, inlined below) in the Zoom runtime ABI:
- *   - persistent state lives in the host-managed ctx[3] arena (2 x 144
- *     floats, ~1.2 KB total - the arena is hundreds of KB)
+ *   - persistent state lives in the host-managed ctx[3] arena (2 x 1248
+ *     floats, ~9.8 KB total - the arena is hundreds of KB)
  *   - params come from the params[] table (see ampsim_zdl_params.h)
  *   - block processing: 8 samples L + 8 samples R, channel-interleaved
  *   - ctx[11]/ctx[12] magic shuttle preserved
@@ -46,9 +46,10 @@ AMP_CODE_SECTION(AMP_DRV_AUDIO_FUNC)
 #define AMP_RAW_MAX 0.14f
 #define AMP_RAW_TO_NORM 7.1428571f
 
-/* one Ampsim instance per channel; state float count is fixed generously
-   (Ampsim_state_size() is 696 bytes < 184 floats = 736 bytes). */
-#define AMP_STATE_FLOATS 184u
+/* one Ampsim instance per channel; state float count is fixed generously.
+   The cabinet IR adds a 1024-float rolling delay per channel, so state is
+   ~4.8 KB/channel < 1248 floats = 4992 bytes (the arena is hundreds of KB). */
+#define AMP_STATE_FLOATS 1248u
 
 typedef struct AmpZdlState {
     uint32_t magic;

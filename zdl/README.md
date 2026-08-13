@@ -3,9 +3,10 @@
 Custom AMP-category effect for the Zoom G1on / MS-series (ZDL). Original
 boutique-amp DSP: input trim (fixed) -> input stage -> gain stage with
 touch dynamics -> tone network -> power stage with sag -> Neve transformer
-+ 1073-style EQ -> speaker resonance + cabinet + SM57-style mic pickup ->
-level. Nine knobs + a Voice switch across the LineSel pages (mirrors the
-VST). Voice toggles Nashville (session sheen) vs Emo/Edge (earlier breakup,
++ 1073-style EQ -> speaker resonance + cabinet voicing + 1024-tap cabinet
+IR convolution (miked-cab kernel: mic + cone resonances + room) -> level.
+Nine knobs + a Voice switch across the LineSel pages (mirrors the VST).
+Voice toggles Nashville (session sheen) vs Emo/Edge (earlier breakup,
 more mid body, warmer top):
 
 | Page | Knob | Param | Range | Maps to |
@@ -30,7 +31,8 @@ exactly like plugging into a tube amp.
 - The core is ZDL-safe (no heap, no double, no math library, no division;
   all filter coefficients are precomputed constants).
 - State lives in the host-managed `ctx[3]` arena (one Ampsim instance per
-  channel, ~1.5 KB of DSP state total; 184 floats reserved each).
+  channel, ~9.8 KB of DSP state total; 1248 floats reserved each - most of
+  it the IR's rolling delay buffer, the kernel itself is static const).
 - NOT yet hardware-tested. Before loading on a pedal, follow the project's
   hardware-probe practice (research_docs/docs_SAFE-DSP-RULES.md in the
   reverson repo): start with an `audio_nop` smoke build, verify it appears,

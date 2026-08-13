@@ -252,10 +252,12 @@ int main(void) {
         Ampsim_set_param(a, AMP_PARAM_LEVEL, 0.8f);
         Ampsim_set_param(a, AMP_PARAM_VOICE, 0.0f);
         Ampsim_reset(a);
-        float r_nash = run_rms(a, 220.0f, 0.25f, 32768u, 16384u);
+        /* 900 Hz: both voices' cabinet IRs are ~equal there, so the RMS
+         * difference is driven by the gain-stage base, not the IR comb. */
+        float r_nash = run_rms(a, 900.0f, 0.30f, 32768u, 16384u);
         Ampsim_set_param(a, AMP_PARAM_VOICE, 1.0f);
         Ampsim_reset(a);
-        float r_emo = run_rms(a, 220.0f, 0.25f, 32768u, 16384u);
+        float r_emo = run_rms(a, 900.0f, 0.30f, 32768u, 16384u);
         CHECK(r_emo > 1.02f * r_nash, "Emo/Edge voice breaks up earlier (higher gain base)");
         CHECK(Ampsim_get_param(a, AMP_PARAM_VOICE) == 1.0f, "voice param round-trip");
     }
@@ -310,6 +312,59 @@ int main(void) {
 
     /* 15. init rejects too-small buffer */
     CHECK(Ampsim_init(mem, need - 1u, 44100.0f) == NULL, "rejects small buffer");
+
+    /* 16. cabinet IR is a true convolution: one impulse in, energy must
+     *      keep ringing out for hundreds of samples after the input stops,
+     *      and decay toward zero by the end (kernel length 1024). */
+    {
+        Ampsim_set_param(a, AMP_PARAM_GAIN, 0.2f);   /* clean: no clip coloring */
+        Ampsim_set_param(a, AMP_PARAM_BASS, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_MID, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_TREBLE, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_MASTER, 0.4f);
+        Ampsim_set_param(a, AMP_PARAM_LEVEL, 0.8f);
+        Ampsim_reset(a);
+        float ov = 0.0f;
+        Ampsim_process(a, 1.0f, &ov);       /* single impulse */
+        int tail_nz = 0, late_nz = 0;
+        double e_tail = 0.0, e_late = 0.0;
+        for (int i = 1; i < 1024; ++i) {
+            Ampsim_process(a, 0.0f, &ov);
+            if (i >= 64 && i < 800) { if (ov != 0.0f) tail_nz = 1; e_tail += (double)ov * ov; }
+            if (i >= 900) { e_late += (double)ov * ov; if (ov != 0.0f) late_nz = 1; }
+        }
+        CHECK(tail_nz == 1, "IR tail rings after the impulse");
+        CHECK(e_tail > 1e-8, "IR tail carries energy");
+        CHECK(late_nz == 1 && e_late < e_tail, "IR tail decays toward zero");
+    }
+
+    /* 17. voice switch mid-stream must not pop: swapping the IR pointer with
+     *      a shared delay buffer keeps the convolution continuous (no reset). */
+    {
+        Ampsim_set_param(a, AMP_PARAM_GAIN, 0.4f);
+        Ampsim_set_param(a, AMP_PARAM_BASS, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_MID, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_TREBLE, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_MASTER, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_LEVEL, 0.8f);
+        Ampsim_set_param(a, AMP_PARAM_VOICE, 0.0f);
+        Ampsim_reset(a);
+        float prev = 0.0f, worst = 0.0f;
+        for (int i = 0; i < 8192; ++i) {
+            float t = (float)i / 44100.0f;
+            float in = 0.2f * sinf(2.0f * 3.14159265f * 220.0f * t);
+            float ov2 = 0.0f;
+            Ampsim_process(a, in, &ov2);
+            if (i == 4096) Ampsim_set_param(a, AMP_PARAM_VOICE, 1.0f); /* mid-stream */
+            float d = ov2 - prev;
+            if (d < 0.0f) d = -d;
+            if (d > worst) worst = d;
+            prev = ov2;
+        }
+        /* a pop would show up as a step far larger than the sine's slope */
+        float slope = 0.2f * 2.0f * 3.14159265f * 220.0f / 44100.0f;
+        CHECK(worst < 40.0f * slope + 1e-5f, "voice switch mid-stream does not pop");
+    }
 
     free(mem);
     if (failures == 0) { printf("\nALL TESTS PASSED\n"); return 0; }
