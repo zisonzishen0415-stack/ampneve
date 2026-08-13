@@ -215,11 +215,16 @@ void Ampsim_set_param(Ampsim* a, AmpsimParam p, float v) {
             s->gain_drive = s->gain_base + 2.6f * v;
             break;
         case AMP_PARAM_VOICE:
-            s->voice = (v >= 0.5f) ? 1.0f : 0.0f;
-            s->gain_base = (v >= 0.5f) ? 0.35f : 0.2f;
-            s->gain_drive = s->gain_base + 2.6f * s->gain;
-            update_voice_coeffs(a);
+        {
+            float nv = (v >= 0.5f) ? 1.0f : 0.0f;
+            if (nv != s->voice) {
+                s->voice = nv;
+                s->gain_base = (nv >= 0.5f) ? 0.35f : 0.2f;
+                s->gain_drive = s->gain_base + 2.6f * s->gain;
+                update_voice_coeffs(a);
+            }
             break;
+        }
         case AMP_PARAM_BASS:
             s->bass = v;
             tone_peaking(&s->tone_bass, AMP_TONE_BASS_COSW, AMP_TONE_BASS_ALPHA, 0.5f + v);

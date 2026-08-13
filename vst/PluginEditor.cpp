@@ -59,6 +59,7 @@ AmpNeveAudioProcessorEditor::AmpNeveAudioProcessorEditor(AmpNeveAudioProcessor& 
         processor.apvts, "bypass", bypassButton);
 
     voiceButton.setButtonText("VOICE");
+    voiceButton.setClickingTogglesState(true);
     addAndMakeVisible(voiceButton);
     voiceAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         processor.apvts, "voice", voiceButton);
@@ -250,5 +251,11 @@ void AmpNeveAudioProcessorEditor::resized() {
 }
 
 void AmpNeveAudioProcessorEditor::timerCallback() {
+    /* VOICE button text mirrors the active voice (Nashville/Emo) */
+    if (auto* pVoice = processor.apvts.getRawParameterValue("voice")) {
+        const char* txt = (pVoice->load() > 0.5f) ? "VOICE EMO" : "VOICE NAS";
+        if (voiceButton.getButtonText() != juce::String(txt))
+            voiceButton.setButtonText(txt);
+    }
     repaint();
 }

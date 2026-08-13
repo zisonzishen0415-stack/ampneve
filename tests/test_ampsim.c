@@ -260,7 +260,55 @@ int main(void) {
         CHECK(Ampsim_get_param(a, AMP_PARAM_VOICE) == 1.0f, "voice param round-trip");
     }
 
-    /* 14. init rejects too-small buffer */
+    /* 14. redundant same-value set_param must not reset filter states
+     *      (regression: VOICE used to reload every biquad per block -> pops) */
+    {
+        uint32_t need2 = Ampsim_state_size();
+        size_t nf2 = (need2 + sizeof(float) - 1u) / sizeof(float);
+        float* memB = (float*)calloc(nf2, sizeof(float));
+        CHECK(memB != NULL, "alloc control instance");
+        if (memB) {
+            Ampsim* b = Ampsim_init(memB, (uint32_t)(nf2 * sizeof(float)), 44100.0f);
+            /* align every param on both instances */
+            Ampsim_set_param(a, AMP_PARAM_INPUT, 1.0f);
+            Ampsim_set_param(b, AMP_PARAM_INPUT, 1.0f);
+            Ampsim_set_param(a, AMP_PARAM_GAIN, 0.5f);
+            Ampsim_set_param(b, AMP_PARAM_GAIN, 0.5f);
+            Ampsim_set_param(a, AMP_PARAM_BASS, 0.5f);
+            Ampsim_set_param(b, AMP_PARAM_BASS, 0.5f);
+            Ampsim_set_param(a, AMP_PARAM_MID, 0.5f);
+            Ampsim_set_param(b, AMP_PARAM_MID, 0.5f);
+            Ampsim_set_param(a, AMP_PARAM_TREBLE, 0.5f);
+            Ampsim_set_param(b, AMP_PARAM_TREBLE, 0.5f);
+            Ampsim_set_param(a, AMP_PARAM_MASTER, 0.5f);
+            Ampsim_set_param(b, AMP_PARAM_MASTER, 0.5f);
+            Ampsim_set_param(a, AMP_PARAM_LEVEL, 0.8f);
+            Ampsim_set_param(b, AMP_PARAM_LEVEL, 0.8f);
+            Ampsim_set_param(a, AMP_PARAM_NEVE, 1.0f);
+            Ampsim_set_param(b, AMP_PARAM_NEVE, 1.0f);
+            Ampsim_set_param(a, AMP_PARAM_CAB, 0.5f);
+            Ampsim_set_param(b, AMP_PARAM_CAB, 0.5f);
+            Ampsim_set_param(a, AMP_PARAM_PRESENCE, 1.0f);
+            Ampsim_set_param(b, AMP_PARAM_PRESENCE, 1.0f);
+            Ampsim_set_param(a, AMP_PARAM_VOICE, 0.0f);
+            Ampsim_set_param(b, AMP_PARAM_VOICE, 0.0f);
+            Ampsim_reset(a); Ampsim_reset(b);
+            int mismatch = 0;
+            for (int i = 0; i < 16384; ++i) {
+                float t = (float)i / 44100.0f;
+                float in = 0.4f * sinf(2.0f * 3.14159265f * 220.0f * t);
+                if ((i % 64) == 0) Ampsim_set_param(a, AMP_PARAM_VOICE, 0.0f); /* redundant */
+                float oa = 0.0f, ob = 0.0f;
+                Ampsim_process(a, in, &oa);
+                Ampsim_process(b, in, &ob);
+                if (fabsf(oa - ob) > 1e-5f) { mismatch = 1; break; }
+            }
+            CHECK(!mismatch, "redundant voice set_param does not reset filters");
+            free(memB);
+        }
+    }
+
+    /* 15. init rejects too-small buffer */
     CHECK(Ampsim_init(mem, need - 1u, 44100.0f) == NULL, "rejects small buffer");
 
     free(mem);
