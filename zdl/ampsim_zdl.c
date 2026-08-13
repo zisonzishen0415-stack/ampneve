@@ -12,6 +12,10 @@
  *   P1: Bass / Mid / Treble,  P2: Gain / Master / Level,
  *   P3: Neve / Cab / Presence.
  *
+ * Input trim is fixed at 1.0 (the calibrated reference) and takes no knob:
+ * the pedal's hardware INPUT VOL sits before the DSP and does the level
+ * matching, exactly like plugging into a real tube amp.
+ *
  * Build (needs TI C6000 CGT, see zdl/README.md):
  *   cl6x --c99 --opt_level=2 --opt_for_space=3 -mv6740 --abi=eabi \
  *        --mem_model:data=far --include_path=<repo>/core \
@@ -90,6 +94,10 @@ static inline void amp_zdl_init(AmpZdlState *st)
     for (i = 0; i < AMP_STATE_FLOATS; ++i) { st->memL[i] = 0.0f; st->memR[i] = 0.0f; }
     if (Ampsim_init(&st->memL, AMP_STATE_FLOATS * sizeof(float), 44100.0f) == 0) return;
     if (Ampsim_init(&st->memR, AMP_STATE_FLOATS * sizeof(float), 44100.0f) == 0) return;
+    /* Input trim fixed at the calibrated reference (1.0); the hardware
+     * INPUT VOL handles level matching before the DSP. */
+    Ampsim_set_param((Ampsim *)&st->memL, AMP_PARAM_INPUT, 1.0f);
+    Ampsim_set_param((Ampsim *)&st->memR, AMP_PARAM_INPUT, 1.0f);
     st->magic = AMP_MAGIC;
     st->version = AMP_VERSION;
     st->initialized = 1u;

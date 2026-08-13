@@ -4,8 +4,10 @@
 
 class AmpNeveAudioProcessor;
 
-/* Pedal-style three-page x three-knob editor (G1on / MS-series look):
- * P1 Bass/Mid/Treble, P2 Gain/Master/Level, P3 Neve/Cab/Presence. */
+/* Pedal-style editor (G1on / MS-series look): three pages x three knobs
+ * (P1 Bass/Mid/Treble, P2 Gain/Master/Level, P3 Neve/Cab/Presence) plus a
+ * dedicated Input knob and a live input level meter in the LCD - mirroring
+ * the hardware INPUT VOL knob that always sits outside the page knobs. */
 class AmpNeveAudioProcessorEditor : public juce::AudioProcessorEditor,
                                     public juce::Timer {
 public:
@@ -26,13 +28,16 @@ private:
 
     juce::Rectangle<int> lcdRect() const;
     juce::Rectangle<int> slotRect(int slot) const;
+    juce::Rectangle<int> knobRect(int index) const;   /* 0..2 page, 3 = Input */
     int focusedSlot = 0;
 
     AmpNeveAudioProcessor& processor;
     juce::Slider knobs[3];
+    juce::Slider inputKnob;
     juce::TextButton pageButton{"PAGE"};
     juce::TextButton bypassButton{"BYPASS"};
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachments[3];
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> inputAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment;
     std::unique_ptr<juce::LookAndFeel> knobLaf;
     int currentPage = 0;

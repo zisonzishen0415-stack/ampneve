@@ -2,6 +2,7 @@
 #include <JuceHeader.h>
 #include "ampsim.h"
 #include <vector>
+#include <atomic>
 #include <cstddef>
 
 class AmpNeveAudioProcessor : public juce::AudioProcessor {
@@ -31,6 +32,11 @@ public:
     void setStateInformation(const void* data, int sizeInBytes) override;
 
     juce::AudioProcessorValueTreeState apvts;
+
+    /* input level meter (audio thread -> editor): smoothed raw-input peak
+     * and a slowly-decaying peak hold, linear 0..1 (read by the editor). */
+    std::atomic<float> inMeter{0.0f};
+    std::atomic<float> inMeterPeak{0.0f};
 
 private:
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();

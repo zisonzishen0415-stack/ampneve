@@ -19,6 +19,7 @@ AmpNeveAudioProcessor::createParameterLayout() {
     add("neve",     "Neve",     1.00f);
     add("cab",      "Cab",      0.50f);
     add("presence", "Presence", 1.00f);
+    add("input", "Input", 1.00f);
     layout.add(std::make_unique<juce::AudioParameterBool>("bypass", "Bypass", false));
     return layout;
 }
@@ -52,6 +53,7 @@ void AmpNeveAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     auto* pNeve     = apvts.getRawParameterValue("neve");
     auto* pCab      = apvts.getRawParameterValue("cab");
     auto* pPresence = apvts.getRawParameterValue("presence");
+    auto* pInput    = apvts.getRawParameterValue("input");
     auto* pBypass   = apvts.getRawParameterValue("bypass");
 
     if (core == nullptr) { buffer.clear(); return; }
@@ -66,6 +68,7 @@ void AmpNeveAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     Ampsim_set_param(core, AMP_PARAM_NEVE,    *pNeve);
     Ampsim_set_param(core, AMP_PARAM_CAB,     *pCab);
     Ampsim_set_param(core, AMP_PARAM_PRESENCE, *pPresence);
+    Ampsim_set_param(core, AMP_PARAM_INPUT, *pInput);
 
     const int numSamples = buffer.getNumSamples();
     if ((int)monoIn.size() < numSamples) monoIn.resize(numSamples);
@@ -77,11 +80,25 @@ void AmpNeveAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     float* outL = buffer.getWritePointer(0);
     float* outR = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
 
+    float blockPeak = 0.0f;
     for (int i = 0; i < numSamples; ++i) {
+        float av = in[i] < 0.0f ? -in[i] : in[i];
+        if (av > blockPeak) blockPeak = av;
         float o = 0.0f;
         Ampsim_process(core, in[i], &o);
         if (outR != nullptr) { outL[i] = o; outR[i] = o; }
         else                 { outL[i] = o; }
+    }
+    /* input meter (raw DAW input, pre-trim): fast attack, ~250 ms release;
+     * peak hold decays slowly. Editor colors vs the -12..-6 dBFS DI target. */
+    {
+        float cur = inMeter.load(std::memory_order_relaxed);
+        float c = (blockPeak > cur) ? 0.45f : 0.06f;
+        inMeter.store(cur + (blockPeak - cur) * c, std::memory_order_relaxed);
+        float pk = inMeterPeak.load(std::memory_order_relaxed);
+        if (blockPeak > pk) pk = blockPeak;
+        else                pk *= 0.997f;
+        inMeterPeak.store(pk, std::memory_order_relaxed);
     }
 }
 

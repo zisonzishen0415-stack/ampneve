@@ -1,28 +1,33 @@
 # AmpNeve ZDL (Zoom MultiStomp)
 
 Custom AMP-category effect for the Zoom G1on / MS-series (ZDL). Original
-boutique-amp DSP: input stage -> gain stage with touch dynamics -> tone
-network -> power stage with sag -> Neve transformer + 1073-style EQ ->
-speaker resonance + cabinet -> level. Six knobs across two LineSel pages
-(mirrors the VST):
+boutique-amp DSP: input trim (fixed) -> input stage -> gain stage with
+touch dynamics -> tone network -> power stage with sag -> Neve transformer
++ 1073-style EQ -> speaker resonance + cabinet -> level. Nine knobs across
+three LineSel pages (mirrors the VST):
 
 | Page | Knob | Param | Range | Maps to |
 |---|---|---|---|---|
-| P1 | 1 | Gain | 0..1 | preamp gain + touch-dynamics base |
-| P1 | 2 | Bass | 0..1 | tone low (0.5 flat) |
-| P1 | 3 | Mid | 0..1 | tone mid (0.5 flat) |
-| P2 | 1 | Treble | 0..1 | tone high (0.5 flat) |
+| P1 | 1 | Bass | 0..1 | tone low (0.5 flat) |
+| P1 | 2 | Mid | 0..1 | tone mid (0.5 flat) |
+| P1 | 3 | Treble | 0..1 | tone high (0.5 flat) |
+| P2 | 1 | Gain | 0..1 | preamp gain + touch-dynamics base |
 | P2 | 2 | Master | 0..1 | power drive + sag amount |
 | P2 | 3 | Level | 0..1 | output (0.5..1.5 gain) |
+| P3 | 1 | Neve | 0..1 | coloration wet/dry (0 = bypass) |
+| P3 | 2 | Cab | 0..1 | cabinet dark(0)..bright(1) |
+| P3 | 3 | Presence | 0..1 | speaker 3.5 kHz resonance |
 
-Cab voicing blend and Neve coloration are fixed internally (brand sound).
+Input trim is fixed at 1.0 (the calibrated reference) and takes no knob:
+the pedal's hardware INPUT VOL does the level matching before the DSP,
+exactly like plugging into a tube amp.
 
 ## Hardware / build status
 
 - The core is ZDL-safe (no heap, no double, no math library, no division;
   all filter coefficients are precomputed constants).
 - State lives in the host-managed `ctx[3]` arena (one Ampsim instance per
-  channel, ~776 bytes total).
+  channel, ~1.2 KB of DSP state total; 160 floats reserved each).
 - NOT yet hardware-tested. Before loading on a pedal, follow the project's
   hardware-probe practice (research_docs/docs_SAFE-DSP-RULES.md in the
   reverson repo): start with an `audio_nop` smoke build, verify it appears,

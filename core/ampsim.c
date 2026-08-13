@@ -9,6 +9,7 @@ typedef struct {
 
 typedef struct {
     /* params */
+    float input;               /* input trim, 0..1 (1.0 = calibrated ref) */
     float gain, bass, mid, treble, master, level;
     float sample_rate;
 
@@ -83,6 +84,15 @@ static float recip_approx(float x) {
     return y;
 }
 
+/* Input trim: 0..1 maps to 0.125x..1.25x input gain. The calibrated
+ * reference (DI recorded at -12..-6 dBFS peak) is v = 1.0 -> 1.25x, the
+ * historical fixed input gain. Pure multiply-add, no division. */
+float Ampsim_input_gain(float v) {
+    if (v < 0.0f) v = 0.0f;
+    else if (v > 1.0f) v = 1.0f;
+    return 0.125f + 1.125f * v;
+}
+
 /* smooth cubic soft clip: x - x^3/3 on [-1,1], saturates at +-2/3.
  * No division, no math library. */
 static float clip3(float x) {
@@ -143,6 +153,7 @@ Ampsim* Ampsim_init(void* mem, uint32_t bytes, float sample_rate) {
     AmpsimState* s = &a->s;
     s->sample_rate = sample_rate;
 
+    s->input = 1.0f;
     s->gain = 0.45f;
     s->bass = s->mid = s->treble = 0.50f;
     s->master = 0.50f;
@@ -151,7 +162,7 @@ Ampsim* Ampsim_init(void* mem, uint32_t bytes, float sample_rate) {
     s->cab_tone = 0.5f;
     s->presence = 1.0f;
 
-    s->in_g = 1.25f;
+    s->in_g = Ampsim_input_gain(s->input);
     s->gain_drive = 0.2f + 2.6f * s->gain;
     s->power_drive = 0.5f + 1.3f * s->master;
     s->sag_amt = 0.30f * s->master;
@@ -175,6 +186,10 @@ void Ampsim_set_param(Ampsim* a, AmpsimParam p, float v) {
     if (v > 1.0f) v = 1.0f;
     AmpsimState* s = &a->s;
     switch (p) {
+        case AMP_PARAM_INPUT:
+            s->input = v;
+            s->in_g = Ampsim_input_gain(v);
+            break;
         case AMP_PARAM_GAIN:
             s->gain = v;
             s->gain_drive = 0.2f + 2.6f * v;
@@ -216,6 +231,7 @@ float Ampsim_get_param(const Ampsim* a, AmpsimParam p) {
     if (!a) return 0.0f;
     const AmpsimState* s = &a->s;
     switch (p) {
+        case AMP_PARAM_INPUT:  return s->input;
         case AMP_PARAM_GAIN:   return s->gain;
         case AMP_PARAM_BASS:   return s->bass;
         case AMP_PARAM_MID:    return s->mid;

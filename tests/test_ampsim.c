@@ -222,7 +222,27 @@ int main(void) {
         CHECK(r_pres_on > 1.03f * r_pres_off, "presence knob boosts speaker resonance");
     }
 
-    /* 12. init rejects too-small buffer */
+    /* 12. input knob scales the input stage (and drives saturation) */
+    {
+        Ampsim_set_param(a, AMP_PARAM_GAIN, 0.4f);
+        Ampsim_set_param(a, AMP_PARAM_BASS, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_MID, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_TREBLE, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_MASTER, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_LEVEL, 0.8f);
+        Ampsim_set_param(a, AMP_PARAM_INPUT, 1.0f);
+        Ampsim_reset(a);
+        float r_in_hi = run_rms(a, 220.0f, 0.10f, 16384u, 8192u);
+        Ampsim_set_param(a, AMP_PARAM_INPUT, 0.0f);
+        Ampsim_reset(a);
+        float r_in_lo = run_rms(a, 220.0f, 0.10f, 16384u, 8192u);
+        /* 1.25x vs 0.125x input gain -> output should differ strongly */
+        CHECK(r_in_hi > 4.0f * r_in_lo, "input knob scales the amp input");
+        CHECK(fabsf(Ampsim_input_gain(1.0f) - 1.25f) < 1e-6f, "input gain ref = 1.25 at max");
+        CHECK(fabsf(Ampsim_input_gain(0.0f) - 0.125f) < 1e-6f, "input gain floor = 0.125");
+    }
+
+    /* 13. init rejects too-small buffer */
     CHECK(Ampsim_init(mem, need - 1u, 44100.0f) == NULL, "rejects small buffer");
 
     free(mem);

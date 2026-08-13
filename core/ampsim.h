@@ -24,10 +24,11 @@
 extern "C" {
 #endif
 
-#define AMPNEVE_NUM_PARAMS 9u
+#define AMPNEVE_NUM_PARAMS 10u
 
 typedef enum {
-    AMP_PARAM_GAIN = 0,    /* preamp gain + touch-dynamics base, 0..1 */
+    AMP_PARAM_INPUT = 0,  /* input trim, 0..1 (1.0 = calibrated ref) */
+    AMP_PARAM_GAIN,    /* preamp gain + touch-dynamics base, 0..1 */
     AMP_PARAM_BASS,        /* tone network low, 0..1 (0.5 = flat) */
     AMP_PARAM_MID,         /* tone network mid, 0..1 (0.5 = flat) */
     AMP_PARAM_TREBLE,      /* tone network high, 0..1 (0.5 = flat) */
@@ -37,6 +38,10 @@ typedef enum {
     AMP_PARAM_CAB,         /* cabinet voicing, 0..1 (0 = dark, 1 = bright) */
     AMP_PARAM_PRESENCE     /* speaker 3.5kHz resonance amount, 0..1 */
 } AmpsimParam;
+
+/* Maps the 0..1 Input knob to a linear input gain: 0.125x..1.25x,
+ * where 1.0 = the calibrated reference (the historical fixed 1.25x). */
+float Ampsim_input_gain(float v);
 
 typedef struct Ampsim Ampsim;   /* opaque; state lives in caller memory */
 
