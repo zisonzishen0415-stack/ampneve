@@ -37,8 +37,8 @@ typedef struct {
 
     /* speaker + cabinet */
     Bq reso_low, reso_high;
-    Bq cab_dark[4];
-    Bq cab_bright[4];
+    Bq cab_dark[AMP_CAB_DARK_N];
+    Bq cab_bright[AMP_CAB_BRIGHT_N];
     float cab_tone;             /* fixed dark/bright blend */
 
     /* level */
@@ -107,10 +107,8 @@ static void update_stage_coeffs(Ampsim* a) {
     AmpsimState* s = &a->s;
     int i;
     for (i = 0; i < 3; ++i) bq_load(&s->neve_bq[i], &AMP_NEVE[i]);
-    for (i = 0; i < 4; ++i) {
-        bq_load(&s->cab_dark[i], &AMP_CAB_DARK[i]);
-        bq_load(&s->cab_bright[i], &AMP_CAB_BRIGHT[i]);
-    }
+    for (i = 0; i < AMP_CAB_DARK_N; ++i) bq_load(&s->cab_dark[i], &AMP_CAB_DARK[i]);
+    for (i = 0; i < AMP_CAB_BRIGHT_N; ++i) bq_load(&s->cab_bright[i], &AMP_CAB_BRIGHT[i]);
     bq_load(&s->reso_low, &AMP_RESO_LOW);
     bq_load(&s->reso_high, &AMP_RESO_HIGH);
     tone_peaking(&s->tone_bass,   AMP_TONE_BASS_COSW,   AMP_TONE_BASS_ALPHA,   1.0f);
@@ -123,10 +121,8 @@ void Ampsim_reset(Ampsim* a) {
     AmpsimState* s = &a->s;
     int i;
     for (i = 0; i < 3; ++i) { s->neve_bq[i].v1 = s->neve_bq[i].v2 = 0.0f; }
-    for (i = 0; i < 4; ++i) {
-        s->cab_dark[i].v1 = s->cab_dark[i].v2 = 0.0f;
-        s->cab_bright[i].v1 = s->cab_bright[i].v2 = 0.0f;
-    }
+    for (i = 0; i < AMP_CAB_DARK_N; ++i) { s->cab_dark[i].v1 = s->cab_dark[i].v2 = 0.0f; }
+    for (i = 0; i < AMP_CAB_BRIGHT_N; ++i) { s->cab_bright[i].v1 = s->cab_bright[i].v2 = 0.0f; }
     s->reso_low.v1 = s->reso_low.v2 = 0.0f;
     s->reso_high.v1 = s->reso_high.v2 = 0.0f;
     s->tone_bass.v1 = s->tone_bass.v2 = 0.0f;
@@ -153,14 +149,14 @@ Ampsim* Ampsim_init(void* mem, uint32_t bytes, float sample_rate) {
     s->in_g = 1.25f;
     s->gain_drive = 0.2f + 2.6f * s->gain;
     s->power_drive = 0.5f + 1.3f * s->master;
-    s->sag_amt = 0.45f * s->master;
+    s->sag_amt = 0.30f * s->master;
     s->neve_g = 1.9f;
     s->cab_tone = 0.5f;
     s->level_gain = 0.5f + s->level;
 
     /* one-pole time constants (approx tau = 1/(fs*c)); no division */
     s->env_attack_c  = recip_approx(sample_rate * 0.002f);  /* ~2 ms touch */
-    s->env_release_c = recip_approx(sample_rate * 0.030f);  /* ~30 ms */
+    s->env_release_c = recip_approx(sample_rate * 0.060f);  /* ~60 ms, no pump */
     s->sag_attack_c  = recip_approx(sample_rate * 0.001f);  /* ~1 ms */
     s->sag_release_c = recip_approx(sample_rate * 0.200f);  /* ~200 ms */
 
@@ -194,7 +190,7 @@ void Ampsim_set_param(Ampsim* a, AmpsimParam p, float v) {
         case AMP_PARAM_MASTER:
             s->master = v;
             s->power_drive = 0.5f + 1.3f * v;
-            s->sag_amt = 0.45f * v;
+            s->sag_amt = 0.30f * v;
             break;
         case AMP_PARAM_LEVEL:
             s->level = v;
@@ -226,7 +222,7 @@ void Ampsim_process(Ampsim* a, float in, float* out) {
      *    then a DC block (the x^2 term injects DC). */
     float x = in * s->in_g;
     float x2 = x * x;
-    x = x - 0.10f * x2 * x + 0.03f * x2;
+    x = x - 0.07f * x2 * x + 0.02f * x2;
     {
         float dy = x - s->dc_x1 + 0.995f * s->dc_y1;
         s->dc_x1 = x;
@@ -240,7 +236,7 @@ void Ampsim_process(Ampsim* a, float in, float* out) {
         float ax = x < 0.0f ? -x : x;
         float c = (ax > s->env) ? s->env_attack_c : s->env_release_c;
         s->env += (ax - s->env) * c;
-        float drive = s->gain_drive * (0.55f + 0.65f * s->env);
+        float drive = s->gain_drive * (0.65f + 0.45f * s->env);
         x = clip3(x * drive);
     }
 

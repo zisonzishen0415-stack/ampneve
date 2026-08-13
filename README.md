@@ -41,6 +41,9 @@ independent means:
   `sinf/cosf/powf/logf`, no division, no large writable statics. All filter
   coefficients are precomputed constants (`core/ampsim_coeffs.h`, generated
   by `tools/gen_coeffs.py`), so the audio path is pure multiply-add.
+- **Nashville session voice**: tight low end (105 Hz resonance +2.5 dB),
+  forward ~850 Hz mid, glassy top (full 4th-order 10/12 kHz lowpass) -
+  the clean/edge platform studio country and modern shoegaze players use.
 - **6 knobs, two pages x 3** (pedal style): P1 Gain/Bass/Mid,
   P2 Treble/Master/Level.
 - **Touch dynamics**: the gain stage's clip drive rides the input envelope,

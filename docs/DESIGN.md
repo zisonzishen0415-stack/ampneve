@@ -1,8 +1,10 @@
 # AmpNeve Boutique Amp Design
 
 Goal: a boutique-quality independent amp that feels like a real amp, not an
-EQ + clipper. Target voice: DIIV / modern-shoegaze clean-to-light-crunch
-with strong touch dynamics (pick softly = clean, pick hard = break up).
+EQ + clipper. Target voice: **Nashville session-player clean** (Brent Mason /
+Vince Gill / modern studio country) with strong touch dynamics (pick softly =
+clean, pick hard = edge-of-breakup). Works as the clean/edge platform for
+DIIV / modern-shoegaze chains too.
 
 ## Signal chain (v1)
 
@@ -24,6 +26,34 @@ in
 All stages are ZDL-safe: polynomial saturation, one-pole envelopes,
 precomputed-constant biquads. No heap, no double, no math library, no
 division in the audio path.
+
+## Nashville voicing (v2a)
+
+The v1 voicing was boomy in the low-mid (+4.8 dB at 105 Hz), had a honky
+presence hump at 2.7-3.8 kHz, and rolled the top end off too early (the cab
+lowpass was only half-applied - see bug below). A clean arpeggio through it
+sounded uncanny. Retuned for the Nashville studio voice:
+
+| Region | v1 | v2a (Nashville) | Why |
+|---|---|---|---|
+| 105 Hz speaker reso | +4 dB Q1.5 | +2.5 dB Q1.2 | tight, no boom |
+| 180 Hz cab body | +3 dB | +1.5 dB | no boxiness |
+| 3.2 kHz presence | +2.5/+5 dB | +1.5/+3 dB | no honk |
+| cab lowpass | 7/9 kHz (bug: 1 section) | 10/12 kHz, full 4th order | glass, no fizz |
+| Neve LF / mid / HF | +2.5/+1.5/+1 dB | +1.5/+1/+1.5 dB | tight lows, extra air |
+| Tone Bass / Mid / Treble | 250 / 700 / 3000 | 140 / 850 / 5000 | forward cut, no 3k honk |
+
+Dynamics softened for clean: envelope release 30 -> 60 ms (no pump on
+arpeggios), drive modulation 0.55+0.65*env -> 0.65+0.45*env, sag amount
+0.45 -> 0.30, input-stage saturation 0.10/0.03 -> 0.07/0.02.
+
+### Bug fixed: cab lowpass was half-applied
+
+`gen_coeffs.py` writes a 4th-order lowpass as two cascaded 2nd-order
+sections (5 biquads total with HP/body/presence), but the core looped over 4
+and dropped the second LP section, so the top end stayed ~12 dB too bright
+above 7-9 kHz. The loops now use `AMP_CAB_DARK_N` / `AMP_CAB_BRIGHT_N` (= 5)
+and the struct arrays are sized from the same constants.
 
 ## Why these stages (boutique rationale)
 

@@ -114,11 +114,24 @@ int main(void) {
         Ampsim_set_param(a, AMP_PARAM_LEVEL, 0.8f);
         Ampsim_set_param(a, AMP_PARAM_BASS, 1.0f);
         Ampsim_reset(a);
-        float r_bass_hi = run_rms(a, 80.0f, 0.12f, 32768u, 16384u);
+        float r_bass_hi = run_rms(a, 120.0f, 0.12f, 32768u, 16384u);
         Ampsim_set_param(a, AMP_PARAM_BASS, 0.0f);
         Ampsim_reset(a);
-        float r_bass_lo = run_rms(a, 80.0f, 0.12f, 32768u, 16384u);
+        float r_bass_lo = run_rms(a, 120.0f, 0.12f, 32768u, 16384u);
         CHECK(r_bass_hi > 1.15f * r_bass_lo, "bass knob boosts low end");
+    }
+
+    /* 6a. tone network: mid boost vs cut at 850 Hz */
+    {
+        Ampsim_set_param(a, AMP_PARAM_BASS, 0.5f);
+        Ampsim_set_param(a, AMP_PARAM_MID, 1.0f);
+        Ampsim_set_param(a, AMP_PARAM_TREBLE, 0.5f);
+        Ampsim_reset(a);
+        float r_mid_hi = run_rms(a, 850.0f, 0.12f, 32768u, 16384u);
+        Ampsim_set_param(a, AMP_PARAM_MID, 0.0f);
+        Ampsim_reset(a);
+        float r_mid_lo = run_rms(a, 850.0f, 0.12f, 32768u, 16384u);
+        CHECK(r_mid_hi > 1.15f * r_mid_lo, "mid knob boosts presence");
     }
 
     /* 6. tone network: treble boost vs cut at 5 kHz */
