@@ -7,32 +7,59 @@ OUT = os.path.normpath(os.path.join(HERE, '..', 'core', 'ampsim_coeffs.h'))
 # --- cabinet IR synthesis (static convolution kernel, replaces the old mic
 #     biquads).  The IR is the miked-cab impulse response: the old mic
 #     pickup's exact HP+LP response as the causal base, plus speaker-cone
-#     modal resonances (damped ringing) and a little room scatter.  Real
-#     cones ring and real mics hear a room - that time structure is what
-#     makes the amp read as a miked cab instead of an EQ'd DI.
+#     modal resonances (damped ringing), a frequency-dependent room
+#     scatter + diffuse early reflections, and all-pass phase dispersion
+#     (the cone's time smear, zero magnitude change).
 #     1024 taps @44.1k = 23.2 ms.  Tune the knobs below, then run
 #     `python tools/gen_coeffs.py` to regenerate core/ampsim_coeffs.h. ---
 CAB_IR_N = 1024            # taps (state: 1024 floats/channel of delay)
 CAB_IR_INIT_DELAY = 29     # ~0.66 ms speaker-to-mic flight time
-CAB_IR_ROOM_LEVEL = 0.015  # room scatter level (0 = off); kept low so the
-                           # scatter's comb nulls don't eat the mid harmonics
-CAB_IR_ROOM_TAU = 0.012    # room tail decay, seconds
+CAB_IR_ROOM_LEVEL = 0.028  # room scatter level (0 = off); sweep-verified:
+                           # 0.018 too dry (decay40 12.5 ms), 0.040 too
+                           # ripply (1.17 dB), 0.028 = decay40 15.9 ms /
+                           # ripple 0.77 dB (old IR: 1.31 dB)
+CAB_IR_ROOM_HP = 180.0     # scatter high-pass: keep the room off the IIR's
+                           # 105/220 Hz bumps, but let the low tail ring
+                           # (HP120 measured no decay gain, only +0.4 dB
+                           # extra stacking at 220)
+CAB_IR_ROOM_XOVER = 1000.0 # decay split: lows ring longer than highs
+CAB_IR_ROOM_TAU_LOW = 0.016    # low-band room tail decay, seconds
+CAB_IR_ROOM_TAU_HIGH = 0.005   # high-band room tail decay, seconds
+CAB_IR_ROOM_ENERGY_LOW = 0.6   # low/high energy split (sums to 1)
+# specular early reflections: (delay s, level dB rel IR peak) as mic-colored
+# copies of the dry impulse - real early reflections ARE specular. Levels are
+# capped so the comb ripple stays <= ~+-1.5 dB worst case (noise bursts were
+# tried and measured WORSE: their flat spectra beat against the base per bin).
+CAB_IR_EARLY = [
+    (0.0012, -22.0),
+    (0.0023, -26.0),
+    (0.0038, -30.0),
+]
+# cone phase dispersion: (f0 Hz, Q) 2nd-order all-passes - pure time smear.
+CAB_IR_ALLPASS = [
+    (1500.0, 0.7),
+    (3200.0, 1.2),
+]
 CAB_IR_SEED_NASH = 12345   # deterministic scatter seeds (stable builds)
 CAB_IR_SEED_EMO = 67890
-# cone modal resonances: (f0 Hz, tau s, boost dB at f0)
+# cone modal resonances: (f0 Hz, tau s, boost dB at f0).
+# Low end is DELIBERATELY thin: the IIR chain (105 Hz reso + 220 Hz body)
+# owns 80-300 Hz and the 1024-tap IR only resolves ~43 Hz/bin there.
+# 900 Hz moved to 1150 Hz to clear the 850 Hz tone-stack Mid center.
 CAB_IR_RESON_NASH = [
-    (150.0, 0.006, 3.0),   # cab thump
     (350.0, 0.005, 2.0),   # low-mid body
-    (900.0, 0.004, 2.5),   # cone bloom
+    (1150.0, 0.004, 2.0),  # cone bloom (clear of the 850 Hz Mid)
     (1800.0, 0.0035, 1.0), # upper bloom
     (2800.0, 0.0028, 0.6), # edge ring
+    (5600.0, 0.0012, 1.5), # SM57 paper on the 4k glass
 ]
 CAB_IR_RESON_EMO = [
-    (160.0, 0.006, 3.0),
-    (420.0, 0.005, 2.5),
-    (900.0, 0.004, 3.0),
-    (1700.0, 0.0032, 1.0),
-    (2600.0, 0.0026, 0.6),
+    (160.0, 0.006, 1.5),   # a hint of thump (low end mostly IIR's job)
+    (420.0, 0.005, 1.5),   # midwest-emo body (reduced, see body500 chain)
+    (1150.0, 0.004, 2.0),  # cone bloom
+    (1700.0, 0.0032, 1.0), # upper bloom
+    (2600.0, 0.0026, 0.6), # edge ring
+    (5200.0, 0.0012, 1.0), # warmer paper than Nashville
 ]
 
 def _ba(c):
@@ -60,7 +87,19 @@ def _res_amp(f0, tau, db, m0):
     # so solve for the amplitude that adds a +db bump on top of m0.
     return m0 * (10.0 ** (db / 20.0) - 1.0) / (tau * FS / 2.0)
 
-def synth_cab_ir(mic_sections, n, init_delay, resonances, room_level, room_tau, seed):
+def _apf(x, f0, q):
+    """2nd-order all-pass (RBJ): flat magnitude, frequency-dependent phase."""
+    w0 = 2.0 * np.pi * f0 / FS
+    c = np.cos(w0)
+    alpha = np.sin(w0) / (2.0 * q)
+    b0, b1, b2 = 1.0 - alpha, -2.0 * c, 1.0 + alpha
+    a0, a1, a2 = 1.0 + alpha, -2.0 * c, 1.0 - alpha
+    return _lfilter(np.array([b0, b1, b2]) / a0, np.array([1.0, a1 / a0, a2 / a0]), x)
+
+
+def synth_cab_ir(mic_sections, n, init_delay, resonances, room_level, seed,
+                 room_hp, room_xover, room_tau_low, room_tau_high, room_energy_low,
+                 early, allpass):
     taps = n - init_delay
     b, a = _cascade(mic_sections)
     imp = np.zeros(taps); imp[0] = 1.0
@@ -75,10 +114,27 @@ def synth_cab_ir(mic_sections, n, init_delay, resonances, room_level, room_tau, 
     rng = np.random.default_rng(seed)
     noise = rng.standard_normal(taps + 8192)
     shaped = _lfilter(b, a, noise)          # room scatter shaped by the mic EQ
+    hpb, hpa = _cascade(butter(FS, room_hp, 2, 'highpass'))
+    shaped = _lfilter(hpb, hpa, shaped)     # 80-300 Hz stays with the IIR chain
+    # frequency-dependent decay: lows ring longer than highs (real rooms).
+    lb, la = _cascade(butter(FS, room_xover, 2, 'lowpass'))
+    noise_low = _lfilter(lb, la, shaped)
+    noise_high = shaped - noise_low
     onset = int(0.0008 * FS)
-    tail = np.zeros(taps)
-    tail[onset:] = np.exp(-t[onset:] / room_tau)
-    ir += room_level * shaped[:taps] * tail
+    tail_low = np.zeros(taps); tail_low[onset:] = np.exp(-t[onset:] / room_tau_low)
+    tail_high = np.zeros(taps); tail_high[onset:] = np.exp(-t[onset:] / room_tau_high)
+    ir += room_level * (room_energy_low * noise_low[:taps] * tail_low +
+                        (1.0 - room_energy_low) * noise_high[:taps] * tail_high)
+    # specular early reflections: mic-colored copies of the dry impulse at
+    # capped levels (comb ripple <= ~+-1.5 dB worst case).
+    pk = np.max(np.abs(ir))
+    for delay, db in early:
+        k = int(delay * FS)
+        if 0 < k < taps:
+            ir[k:] += (10.0 ** (db / 20.0)) * pk * base[:taps - k]
+    # cone phase dispersion: zero magnitude change, pure time smear.
+    for f0, q in allpass:
+        ir = _apf(ir, f0, q)
     w = np.ones(taps)                        # end window: no truncation click
     nw = min(int(0.004 * FS), taps // 4)
     if nw > 0:
@@ -242,9 +298,13 @@ C.append('};\n#define AMP_CAB_BRIGHT_EMO_N 5\n\n')
 mic_nash_ir = butter(FS, 70.0, 2, 'highpass') + [peaking(FS, 5800.0, 1.0, 1.0)] + butter(FS, 11000.0, 2, 'lowpass')
 mic_emo_ir = butter(FS, 70.0, 2, 'highpass') + [peaking(FS, 5500.0, 1.0, 0.5)] + butter(FS, 10000.0, 2, 'lowpass')
 ir_nash = synth_cab_ir(mic_nash_ir, CAB_IR_N, CAB_IR_INIT_DELAY, CAB_IR_RESON_NASH,
-                       CAB_IR_ROOM_LEVEL, CAB_IR_ROOM_TAU, CAB_IR_SEED_NASH)
+                       CAB_IR_ROOM_LEVEL, CAB_IR_SEED_NASH, CAB_IR_ROOM_HP,
+                       CAB_IR_ROOM_XOVER, CAB_IR_ROOM_TAU_LOW, CAB_IR_ROOM_TAU_HIGH,
+                       CAB_IR_ROOM_ENERGY_LOW, CAB_IR_EARLY, CAB_IR_ALLPASS)
 ir_emo = synth_cab_ir(mic_emo_ir, CAB_IR_N, CAB_IR_INIT_DELAY, CAB_IR_RESON_EMO,
-                      CAB_IR_ROOM_LEVEL, CAB_IR_ROOM_TAU, CAB_IR_SEED_EMO)
+                      CAB_IR_ROOM_LEVEL, CAB_IR_SEED_EMO, CAB_IR_ROOM_HP,
+                      CAB_IR_ROOM_XOVER, CAB_IR_ROOM_TAU_LOW, CAB_IR_ROOM_TAU_HIGH,
+                      CAB_IR_ROOM_ENERGY_LOW, CAB_IR_EARLY, CAB_IR_ALLPASS)
 # equalize voice loudness over the guitar band (80..5000 Hz) so the Emo/Edge
 # voice doesn't sit ~4-8 dB quieter than Nashville (its room-scatter comb
 # nulled the lows). Keeps each voice's spectral character, fixes the level.

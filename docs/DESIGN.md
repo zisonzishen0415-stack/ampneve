@@ -229,6 +229,33 @@ and dropped the second LP section, so the top end stayed ~12 dB too bright
 above 7-9 kHz. The loops now use `AMP_CAB_DARK_N` / `AMP_CAB_BRIGHT_N` (= 5)
 and the struct arrays are sized from the same constants.
 
+## Cabinet IR realism tuning (v16)
+
+Cascaded measurement (reso_low -> cab chain -> IR) showed the old IR
+fighting the head: its 150 Hz mode stacked on the 105 Hz resonance + 220 Hz
+body (+4 dB band), its 900 Hz cone bloom sat 50 Hz above the 850 Hz Mid
+center, and its high end was dark where the IIR glass lives. The v16 IR
+(see docs/superpowers/specs/2026-08-14-ir-realism-tuning-design.md) fixes
+the division of labour:
+
+- Low end (80-300 Hz) is the IIR chain's job: the 150 Hz IR mode is gone
+  (Emo's 160 Hz halved), and the room scatter is high-passed at 180 Hz.
+- 900 Hz -> 1150 Hz clears the Mid center; the 850 Hz IR contribution
+  drops +1.5 -> +1.1 dB.
+- SM57 "paper" added at 5.6 kHz (Nashville +1.5 / Emo 5.2 kHz +1.0,
+  tau 1.2 ms) under the IIR glass.
+- Room: scatter 0.028 with frequency-dependent decay (1 kHz split,
+  low tau 16 ms / high tau 5 ms) + three SPECULAR early reflections
+  (1.2/2.3/3.8 ms @ -22/-26/-30 dB, mic-colored copies of the dry
+  impulse). Noise-burst reflections were tried and measured worse: flat
+  spectra beat against the base per-bin and doubled the narrowband ripple.
+- Two 2nd-order all-passes (1.5 kHz Q0.7 / 3.2 kHz Q1.2): cone time smear,
+  0.0000 dB magnitude ripple verified.
+
+Measured after: narrowband ripple (300-5 kHz) 1.31 -> 0.77 dB, decay -40 dB
+at 15.9 ms, low end negative, 5.5 kHz +1.1 dB. A/B renders: out/v15_*.wav
+(old) vs out/v16_*.wav (new), same parameters.
+
 ## Why these stages (boutique rationale)
 
 | Stage | What it adds | Reference |
