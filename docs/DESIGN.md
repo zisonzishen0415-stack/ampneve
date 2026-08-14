@@ -256,6 +256,32 @@ Measured after: narrowband ripple (300-5 kHz) 1.31 -> 0.77 dB, decay -40 dB
 at 15.9 ms, low end negative, 5.5 kHz +1.1 dB. A/B renders: out/v15_*.wav
 (old) vs out/v16_*.wav (new), same parameters.
 
+## Real cabinet IRs (v18)
+
+User feedback: the synthesized cabs "都不怎么真实" - parameter-guessed cone
+modes and modeled rooms cannot reach the detail of a real capture. Replaced
+the synthesized kernels with two REAL sampled IRs from the Tubes&Tone pack
+(user-confirmed redistributable):
+
+- Cabtype 0 = 2x12 open-back (G12H30 + Blue), `ir/5T G12H30+BLU.44.1.wav`
+- Cabtype 1 = 4x12 (Greenback family + 1x8), `ir/5T 412M25+108F59.44.1.wav`
+
+Both 44.1 kHz mono captures, flat within +-2 dB from 80 Hz to 7 kHz
+(smoothed), no deep nulls. Truncated to 2048 taps (46.4 ms, near-field +
+most of the room decay) with an 8 ms squared end window and loudness-
+matched to unity mid-band (300..3000 Hz) gain so the amp's level staging
+is unchanged.
+
+The real IRs own the full miked-cab character, so the front chain
+degenerates to SAFETY filters only (HP 40 Hz rumble + LP 16 kHz hiss +
+identity) and the speaker-resonance biquads are identity - the Presence
+blend is therefore a no-op by design. The click-free cab crossfade
+(dual 2048-tap delay buffers, ~12 ms fade) is unchanged. State: 16976 B
+per channel; ZDL reserves 4352 floats.
+
+A/B renders: out/v18_2x12_default.wav vs out/v18_4x12_default.wav (same
+amp settings, the two real cabs).
+
 ## Cab types + knob simplification (v17)
 
 - Cabtype param (0..2): 1x12 / 2x12 / 4x12 synthesized miked-cab kernels.

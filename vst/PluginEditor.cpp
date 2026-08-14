@@ -39,14 +39,14 @@ const char* AmpNeveAudioProcessorEditor::names[3][3] = {
 
 /* Factory presets: {gain, bass, mid, treble, master, level, neve,
  * cabtype, input}. The first one mirrors the plugin defaults. Cabtype:
- * 1x12 clean platform, 2x12 body for edge/emo, 4x12 for crunch/gain. */
+ * 0 = 2x12 open-back, 1 = 4x12 (real IRs). */
 const AmpNeveAudioProcessorEditor::FactoryPreset
 AmpNeveAudioProcessorEditor::factoryPresets[5] = {
     { "Nashville Clean", { 0.20f, 0.55f, 0.45f, 0.60f, 0.45f, 0.75f, 1.00f, 0.0f, 1.00f } },
-    { "Edge / Breakup",  { 0.35f, 0.50f, 0.50f, 0.50f, 0.55f, 0.75f, 1.00f, 1.0f, 1.00f } },
-    { "British Crunch",  { 0.55f, 0.50f, 0.40f, 0.60f, 0.65f, 0.70f, 1.00f, 2.0f, 1.00f } },
-    { "High Gain",       { 0.85f, 0.50f, 0.45f, 0.55f, 0.90f, 0.70f, 1.00f, 2.0f, 1.00f } },
-    { "Emo / Edge",      { 0.40f, 0.50f, 0.60f, 0.55f, 0.60f, 0.75f, 1.00f, 1.0f, 1.00f } }
+    { "Edge / Breakup",  { 0.35f, 0.50f, 0.50f, 0.50f, 0.55f, 0.75f, 1.00f, 0.0f, 1.00f } },
+    { "British Crunch",  { 0.55f, 0.50f, 0.40f, 0.60f, 0.65f, 0.70f, 1.00f, 1.0f, 1.00f } },
+    { "High Gain",       { 0.85f, 0.50f, 0.45f, 0.55f, 0.90f, 0.70f, 1.00f, 1.0f, 1.00f } },
+    { "Emo / Edge",      { 0.40f, 0.50f, 0.60f, 0.55f, 0.60f, 0.75f, 1.00f, 0.0f, 1.00f } }
 };
 
 static const juce::Colour lcdBg(0xff0d2239);     /* deep blue LCD backlight */
@@ -158,9 +158,9 @@ void AmpNeveAudioProcessorEditor::setPage(int page) {
         bool has = (ids[currentPage][i][0] != '\0');
         knobs[i].setEnabled(has);
         if (has) {
-            /* cabtype is a 3-way switch (0..2); everything else 0..1 */
+            /* cabtype is a 2-way switch (0..1); everything else 0..1 */
             if (strcmp(ids[currentPage][i], "cabtype") == 0)
-                knobs[i].setRange(0.0, 2.0, 1.0);
+                knobs[i].setRange(0.0, 1.0, 1.0);
             else
                 knobs[i].setRange(0.0, 1.0, 0.001);
             attachments[i] = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
@@ -202,17 +202,17 @@ void AmpNeveAudioProcessorEditor::paint(juce::Graphics& g) {
     g.setColour(lcdLit);
     g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 15.0f, juce::Font::bold));
     g.drawText("AMPNEVE", header.removeFromLeft(104), juce::Justification::centredLeft, false);
-    /* build label: proves which generation is loaded (v17 = cab types) */
+    /* build label: proves which generation is loaded (v18 = real IRs) */
     g.setColour(lcdDim);
     g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 11.0f, juce::Font::plain));
-    g.drawText("v17", header.removeFromLeft(34), juce::Justification::centredLeft, false);
+    g.drawText("v18", header.removeFromLeft(34), juce::Justification::centredLeft, false);
     g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 13.0f, juce::Font::bold));
     auto pageArea = header.removeFromRight(42);
     g.drawText(juce::String("P") + juce::String(currentPage + 1), pageArea,
                juce::Justification::centredRight, false);
     auto* pCab = processor.apvts.getRawParameterValue("cabtype");
     float cabtype = (pCab != nullptr) ? pCab->load() : 0.0f;
-    g.drawText(cabtype >= 1.5f ? "4X12" : (cabtype >= 0.5f ? "2X12" : "1X12"),
+    g.drawText(cabtype >= 0.5f ? "4X12" : "2X12",
                header, juce::Justification::centredRight, false);
 
     /* input level meter: label + horizontal bar (raw input peak) + dB text */
@@ -278,7 +278,7 @@ void AmpNeveAudioProcessorEditor::paint(juce::Graphics& g) {
         g.setColour(lcdDim);
         g.fillRect(bar);
         g.setColour(lcdLit);
-        float barFrac = (ids[currentPage][i][0] == 'c') ? val * 0.5f : val;  /* cabtype 0..2 */
+        float barFrac = val;   /* cabtype 0..1 like everything else */
         g.fillRect(bar.withWidth((int)(bar.getWidth() * barFrac)));
         if (i == focusedSlot) {
             g.setColour(lcdLit);

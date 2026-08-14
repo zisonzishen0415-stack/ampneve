@@ -61,12 +61,15 @@ independent means:
   Bass/Mid/Treble, P2 Gain/Master/Level, P3 Neve/Cabtype/Input, plus the
   BYPASS button and a live **input level meter** in the VST LCD
   (green/yellow/red vs the -12..-6 dBFS DI target). Presence is fixed at
-  0.85, the cab voicing blend is gone (each cab type owns its voicing).
-- **Three cabinets (Cabtype knob)**: 1x12 / 2x12 / 4x12 synthesized
-  miked-cab IRs - multi-speaker summing with per-cone ring phases and
-  mic-distance delays (subtle comb in 1-2 kHz), per-cab speaker resonance,
-  voicing chain and room. Switching is click-free: dual-buffer convolution
-  crossfades over ~12 ms.
+  0.85 and is a no-op with the real IRs (the capture owns the top end).
+- **Two real cabinets (Cabtype knob)**: 2x12 open-back (G12H30 + Blue)
+  and 4x12 (Greenback family) - REAL sampled IRs from the Tubes&Tone pack
+  (redistributable), 2048 taps / 46.4 ms keeping the near-field character
+  and most of the room decay. The IRs carry the full miked-cab EQ, so the
+  front chain is reduced to safety filters (HP 40 Hz / LP 16 kHz) and the
+  speaker-resonance biquads are identity (the old Presence knob is now a
+  no-op). Switching cabs is click-free: dual-buffer convolution crossfades
+  over ~12 ms.
 - **Presets (VST)**: a preset row above the pedal buttons - five factory
   presets (Nashville Clean / Edge-Breakup / British Crunch / High Gain /
   Emo-Edge) plus user presets saved as XML files in the OS app-data

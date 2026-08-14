@@ -185,7 +185,6 @@ static void update_cab_coeffs(Ampsim* a) {
     AmpsimState* s = &a->s;
     int i;
     int ct = (s->cabtype >= 0.5f) ? 1 : 0;
-    if (s->cabtype >= 1.5f) ct = 2;
     if (ct >= AMP_CAB_TYPES) ct = AMP_CAB_TYPES - 1;
     for (i = 0; i < AMP_NEVE_N; ++i)
         bq_load_keep(&s->neve_bq[i], &AMP_NEVE[i]);
@@ -217,7 +216,7 @@ void Ampsim_reset(Ampsim* a) {
     s->pre_lp2.v1 = s->pre_lp2.v2 = 0.0f;
     for (i = 0; i < AMP_CAB_IR_N; ++i) { s->ir_delay_a[i] = 0.0f; s->ir_delay_b[i] = 0.0f; }
     s->ir_idx = 0;
-    s->ir = (s->cabtype >= 1.5f) ? AMP_CAB_IR_4X12 : (s->cabtype >= 0.5f ? AMP_CAB_IR_2X12 : AMP_CAB_IR_1X12);
+    s->ir = (s->cabtype >= 0.5f) ? AMP_CAB_IR_4X12 : AMP_CAB_IR_2X12;
     s->ir_prev = s->ir;
     s->fade = 1.0f;
     s->tone_bass.v1 = s->tone_bass.v2 = 0.0f;
@@ -273,7 +272,7 @@ void Ampsim_set_param(Ampsim* a, AmpsimParam p, float v) {
     if (!a) return;
     if (p == AMP_PARAM_CABTYPE) {
         if (v < 0.0f) v = 0.0f;
-        if (v > 2.0f) v = 2.0f;   /* 0..2: 1x12 / 2x12 / 4x12 */
+        if (v > 1.0f) v = 1.0f;   /* 0 = 2x12, 1 = 4x12 */
     } else {
         if (v < 0.0f) v = 0.0f;
         if (v > 1.0f) v = 1.0f;
@@ -291,14 +290,14 @@ void Ampsim_set_param(Ampsim* a, AmpsimParam p, float v) {
         s->v2_drive = 0.2f + 1.5f * v + 16.0f * v * v;
         s->dry_mix = 0.40f - 0.17f * v;
     } else if (p == AMP_PARAM_CABTYPE) {
-        float nv = (v >= 1.5f) ? 2.0f : (v >= 0.5f ? 1.0f : 0.0f);
+        float nv = (v >= 0.5f) ? 1.0f : 0.0f;
         if (nv != s->cabtype) {
             s->cabtype = nv;
             /* IR crossfade: keep the old kernel until the fade completes,
              * both delay buffers always track the input, so the new kernel
              * has full history. */
             s->ir_prev = s->ir;
-            s->ir = (nv >= 1.5f) ? AMP_CAB_IR_4X12 : (nv >= 0.5f ? AMP_CAB_IR_2X12 : AMP_CAB_IR_1X12);
+            s->ir = (nv >= 0.5f) ? AMP_CAB_IR_4X12 : AMP_CAB_IR_2X12;
             s->fade = 0.0f;
             update_cab_coeffs(a);
         }

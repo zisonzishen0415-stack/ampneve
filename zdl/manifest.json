@@ -1,6 +1,6 @@
 {
   "effect_name": "AmpNeve",
-  "comment": "Custom boutique amp + cabinet + Neve-style coloration for the Zoom MultiStomp. Original DSP (not a stock clone), strict real-amp structure (v17): V1 fixed ~4x gain + Miller LP @9k -> V2 cold clipper (Gain + touch dynamics) + Miller LP @5k -> Klon-style clean/dirty mix -> tone network Bass/Mid/Treble -> phase inverter + push-pull power stage with sag (Master) -> Neve transformer even harmonics + 1073-style EQ (Neve, wet/dry) -> speaker resonance + cabinet voicing + 1024-tap miked-cab IR -> Level. Nine knobs, three pages x three: P1 Bass/Mid/Treble, P2 Gain/Master/Level, P3 Neve/Cabtype/Input. Cabtype selects the cabinet: 0 = 1x12, 1 = 2x12, 2 = 4x12 (multi-speaker synthesized IRs, crossfaded on switch). Single Nashville voice. Params persist with the pedal patch (save the patch to remember the settings).",
+  "comment": "Custom boutique amp + cabinet + Neve-style coloration for the Zoom MultiStomp. Original DSP (not a stock clone), strict real-amp structure (v18): V1 fixed ~4x gain + Miller LP @9k -> V2 cold clipper (Gain + touch dynamics) + Miller LP @5k -> Klon-style clean/dirty mix -> tone network Bass/Mid/Treble -> phase inverter + push-pull power stage with sag (Master) -> Neve transformer even harmonics + 1073-style EQ (Neve, wet/dry) -> speaker safety chain + 2048-tap real cabinet IR convolution -> Level. Nine knobs, three pages x three: P1 Bass/Mid/Treble, P2 Gain/Master/Level, P3 Neve/Cabtype/Input. Cabtype selects the cabinet: 0 = 2x12 open-back (G12H30+Blue), 1 = 4x12 (Greenback family) - real Tubes&Tone IR captures, crossfaded on switch. Single Nashville voice. Params persist with the pedal patch (save the patch to remember the settings).",
   "audio_func_name": "Fx_AMP_AmpNeve",
   "gid": 4,
   "gid_comment": "0x04 = AMP category. SONAME prefix becomes ZDL_AMP_.",
@@ -89,13 +89,13 @@
     {
       "name": "Cabtype",
       "type": "knob",
-      "max": 2,
+      "max": 1,
       "default": 0,
       "scale": "linear",
       "audio_min": 0.0,
-      "audio_max": 2.0,
+      "audio_max": 1.0,
       "audio_default": 0.0,
-      "comment": "Cabinet: 0 = 1x12, 1 = 2x12, 2 = 4x12 (multi-speaker synthesized miked-cab IRs, crossfaded)."
+      "comment": "Cabinet: 0 = 2x12 open-back (G12H30+Blue), 1 = 4x12 (Greenback family) - real Tubes&Tone IR captures, crossfaded on switch."
     },
     {
       "name": "Input",

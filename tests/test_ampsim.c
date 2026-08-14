@@ -217,33 +217,23 @@ int main(void) {
         CHECK(r_neve_on > 1.03f * r_neve_off, "neve knob changes coloration");
     }
 
-    /* 10. cabtype: 1x12 vs 2x12 vs 4x12 differ (multi-speaker summing +
-     *      per-cab voicing); the low end also shifts (2x12/4x12 bigger body). */
+    /* 10. cabtype: 2x12 vs 4x12 differ (real sampled IRs) */
     {
         Ampsim_set_param(a, AMP_PARAM_NEVE, 1.0f);
         Ampsim_set_param(a, AMP_PARAM_PRESENCE, 1.0f);
-        Ampsim_set_param(a, AMP_PARAM_CABTYPE, 0.0f);   /* 1x12 */
+        Ampsim_set_param(a, AMP_PARAM_CABTYPE, 0.0f);   /* 2x12 */
         Ampsim_reset(a);
-        float r_cab_1x12 = run_rms(a, 6000.0f, 0.06f, 32768u, 16384u);
-        Ampsim_set_param(a, AMP_PARAM_CABTYPE, 1.0f);   /* 2x12 */
+        float r_cab_0 = run_rms(a, 900.0f, 0.12f, 32768u, 16384u);
+        Ampsim_set_param(a, AMP_PARAM_CABTYPE, 1.0f);   /* 4x12 */
         Ampsim_reset(a);
-        float r_cab_2x12 = run_rms(a, 900.0f, 0.12f, 32768u, 16384u);
-        Ampsim_set_param(a, AMP_PARAM_CABTYPE, 2.0f);   /* 4x12 */
-        Ampsim_reset(a);
-        float r_cab_4x12 = run_rms(a, 900.0f, 0.12f, 32768u, 16384u);
-        CHECK(fabsf(r_cab_1x12 - r_cab_2x12) > 0.01f * r_cab_1x12, "cabtype 1x12 vs 2x12 differ");
-        CHECK(fabsf(r_cab_4x12 - r_cab_2x12) > 0.01f * r_cab_2x12, "cabtype 2x12 vs 4x12 differ");
-        Ampsim_set_param(a, AMP_PARAM_CABTYPE, 0.0f);
-        Ampsim_reset(a);
-        float r_low_1x12 = run_rms(a, 110.0f, 0.10f, 32768u, 16384u);
-        Ampsim_set_param(a, AMP_PARAM_CABTYPE, 2.0f);   /* 4x12: bigger low end */
-        Ampsim_reset(a);
-        float r_low_4x12 = run_rms(a, 110.0f, 0.10f, 32768u, 16384u);
-        CHECK(r_low_4x12 > r_low_1x12, "4x12 has more low end than 1x12");
-        CHECK(Ampsim_get_param(a, AMP_PARAM_CABTYPE) == 2.0f, "cabtype param round-trip");
+        float r_cab_1 = run_rms(a, 900.0f, 0.12f, 32768u, 16384u);
+        CHECK(fabsf(r_cab_0 - r_cab_1) > 0.01f * r_cab_0, "cabtype 2x12 vs 4x12 differ");
+        CHECK(Ampsim_get_param(a, AMP_PARAM_CABTYPE) == 1.0f, "cabtype param round-trip");
     }
 
-    /* 11. presence knob: off (0) vs full (1) differ at 3.5 kHz */
+    /* 11. presence knob: with the real sampled IRs the speaker-resonance
+     *      biquads are identity (the IR owns the top end), so presence is a
+     *      no-op by design. */
     {
         Ampsim_set_param(a, AMP_PARAM_PRESENCE, 0.0f);
         Ampsim_reset(a);
@@ -251,7 +241,8 @@ int main(void) {
         Ampsim_set_param(a, AMP_PARAM_PRESENCE, 1.0f);
         Ampsim_reset(a);
         float r_pres_on = run_rms(a, 3500.0f, 0.06f, 32768u, 16384u);
-        CHECK(r_pres_on > 1.03f * r_pres_off, "presence knob boosts speaker resonance");
+        CHECK(fabsf(r_pres_on - r_pres_off) < 0.005f * r_pres_off,
+              "presence is a no-op with real IRs (identity resonance)");
     }
 
     /* 12. input knob scales the input stage (and drives saturation) */

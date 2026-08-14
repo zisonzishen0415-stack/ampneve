@@ -21,7 +21,7 @@ synthesized IRs, crossfaded on switch):
 | P2 | 2 | Master | 0..1 | PI + push-pull power drive + sag amount |
 | P2 | 3 | Level | 0..1 | output (0.20..0.90 gain) |
 | P3 | 1 | Neve | 0..1 | coloration wet/dry (0 = bypass) |
-| P3 | 2 | Cabtype | 0..2 | cabinet: 0 = 1x12, 1 = 2x12, 2 = 4x12 |
+| P3 | 2 | Cabtype | 0..1 | cabinet: 0 = 2x12 (G12H30+Blue), 1 = 4x12 (Greenback family) - real Tubes&Tone IRs |
 | P3 | 3 | Input | 0..1 | input trim 0.125x..1.25x (1.0 = calibrated ref) |
 
 ## State memory
@@ -39,8 +39,8 @@ gain 0.35, master 0.55, level 0.75, presence 0.85.
   all filter coefficients are precomputed constants). Verified statically by
   `tools/check_zdl_safe.py`.
 - State lives in the host-managed `ctx[3]` arena (one Ampsim instance per
-  channel, ~9.8 KB of DSP state total; 1248 floats reserved each - most of
-  it the IR's rolling delay buffer, the kernel itself is static const).
+  channel; dual 2048-tap IR delay buffers for the click-free cab
+  crossfade = 16976 B; 4352 floats reserved each).
 - Every build runs a post-compile safety audit (`tools/check_zdl_obj.py`)
   that parses the `.obj` and fails on the frozen-pedal patterns from
   SAFE-DSP-RULES: writable `.fardata`, uninitialised statics, unexpected

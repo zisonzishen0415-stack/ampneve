@@ -16,9 +16,10 @@
  *   speaker/cab       resonance + voicing + 1024-tap miked-cab IR
  *   level
  *
- * Cab type (v17): 0 = 1x12, 1 = 2x12, 2 = 4x12 - swaps the speaker
- * resonance, the cab voicing chain and the miked-cab IR kernel. Single
- * voice (Nashville character) - the Emo/Edge voice was merged away.
+ * Cab type (v18): 0 = 2x12 open-back (real G12H30+Blue IR), 1 = 4x12
+ * (real Greenback-family IR) - Tubes&Tone captures, 2048 taps. Swapping
+ * mid-stream crossfades the kernels over ~12 ms (no pop). Single voice
+ * (Nashville character); Presence fixed at 0.85 by the UIs.
  *
  * ZDL-safe: no heap (caller memory), no double, no sinf/cosf/powf/logf,
  * no division in the audio path, no large writable statics (the cabinet
@@ -48,7 +49,7 @@ typedef enum {
     AMP_PARAM_LEVEL,       /* output level, 0..1 (0.5..1.5 gain) */
     AMP_PARAM_NEVE,        /* Neve coloration amount, 0..1 (0 = bypass) */
     AMP_PARAM_PRESENCE,    /* speaker 3.5kHz resonance amount, 0..1 */
-    AMP_PARAM_CABTYPE      /* cabinet: 0 = 1x12, 1 = 2x12, 2 = 4x12 */
+    AMP_PARAM_CABTYPE      /* cabinet: 0 = 2x12 (G12H30+Blue), 1 = 4x12 */
 } AmpsimParam;
 
 /* Maps the 0..1 Input knob to a linear input gain: 0.125x..1.25x,

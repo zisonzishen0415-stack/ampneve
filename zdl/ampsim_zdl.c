@@ -44,9 +44,9 @@ AMP_CODE_SECTION(AMP_DRV_AUDIO_FUNC)
 #define AMP_RAW_TO_NORM 7.1428571f
 
 /* one Ampsim instance per channel; state float count is fixed generously.
-   v17: per-channel state = core (4792 B) + dual 1024-float IR delay buffers
-   (4096 B, crossfade) = 8888 B = 2222 floats; 2304 gives margin. */
-#define AMP_STATE_FLOATS 2304u
+   v18: per-channel state = core + dual 2048-float IR delay buffers
+   (crossfade) = 16976 B = 4244 floats; 4352 gives margin. */
+#define AMP_STATE_FLOATS 4352u
 
 typedef struct AmpZdlState {
     uint32_t magic;
@@ -140,13 +140,13 @@ void AMP_DRV_AUDIO_FUNC(unsigned int *ctx)
     float master   = amp_param_norm(params[AMPNEVE_MASTER_SLOT],   AMPNEVE_MASTER_DEFAULT_NORM);
     float level    = amp_param_norm(params[AMPNEVE_LEVEL_SLOT],    AMPNEVE_LEVEL_DEFAULT_NORM);
     float neve     = amp_param_norm(params[AMPNEVE_NEVE_SLOT],     AMPNEVE_NEVE_DEFAULT_NORM);
-    /* Cabtype: raw 0..2 (a knob scaled to 0..2 by the host); normalize. */
+    /* Cabtype: raw 0..1 (a knob scaled to 0..1 by the host). */
     float cabtype  = 0.0f;
     {
         float raw = params[AMPNEVE_CABTYPE_SLOT];
-        if (raw > 1.0f && raw <= 100.0f) raw = raw * 0.02f;   /* 0..100 -> 0..2 */
+        if (raw > 1.0f && raw <= 100.0f) raw = raw * 0.01f;   /* 0..100 -> 0..1 */
         if (raw < 0.0f) raw = 0.0f;
-        if (raw > 2.0f) raw = 2.0f;
+        if (raw > 1.0f) raw = 1.0f;
         cabtype = raw;
     }
     float input    = amp_param_norm(params[AMPNEVE_INPUT_SLOT],    AMPNEVE_INPUT_DEFAULT_NORM);

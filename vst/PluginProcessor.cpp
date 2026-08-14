@@ -21,7 +21,7 @@ AmpNeveAudioProcessor::createParameterLayout() {
     add("level",    "Level",    0.75f);
     add("neve",     "Neve",     1.00f);
     layout.add(std::make_unique<juce::AudioParameterFloat>(
-        "cabtype", "Cabtype", juce::NormalisableRange<float>(0.0f, 2.0f, 1.0f), 0.0f));
+        "cabtype", "Cabtype", juce::NormalisableRange<float>(0.0f, 1.0f, 1.0f), 0.0f));
     add("input", "Input", 1.00f);
     layout.add(std::make_unique<juce::AudioParameterBool>("bypass", "Bypass", false));
     return layout;
