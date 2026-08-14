@@ -1,19 +1,16 @@
 # AmpNeve ZDL (Zoom MultiStomp)
 
 Custom AMP-category effect for the Zoom G1on / MS-series (ZDL). Original
-boutique-amp DSP, strict real-amp structure (v15): input trim (fixed) ->
-V1 (fixed ~4x gain, soft asymmetric clip, Miller LP @ 9 kHz) -> V2 cold
-clipper (Gain knob + touch dynamics, asymmetric clip, Miller LP @ 5 kHz)
--> Klon-style clean/dirty mix (V1 clean tap + V2 driven path, both through
-the tone stack and power amp) -> tone network -> phase inverter + push-pull
-power amp with sag -> Neve transformer + 1073-style EQ -> speaker
-resonance + cabinet voicing + 1024-tap cabinet IR convolution (miked-cab
-kernel: mic + cone resonances + room) -> level.
-Nine knobs across the LineSel pages (mirrors the VST). Voice is **fixed to
-Nashville** on the pedal: the firmware's visible-knob ceiling is 9 (3 pages
-x 3, reverson ABI.md 3.1), so the VST's Voice switch has no ZDL slot. An
-Emo/Edge variant can be built by setting `AMP_PARAM_VOICE` to `1.0f` in
-`amp_zdl_init()` (one-line change):
+boutique-amp DSP, strict real-amp structure (v17): V1 (fixed ~4x gain, soft
+asymmetric clip, Miller LP @ 9 kHz) -> V2 cold clipper (Gain knob + touch
+dynamics, asymmetric clip, Miller LP @ 5 kHz) -> Klon-style clean/dirty mix
+(V1 clean tap + V2 driven path, both through the tone stack and power amp)
+-> tone network -> phase inverter + push-pull power amp with sag -> Neve
+transformer + 1073-style EQ -> speaker resonance + cabinet voicing +
+1024-tap cabinet IR convolution (miked-cab kernel, per cab type) -> level.
+Nine knobs across the LineSel pages, mirroring the VST. Presence is fixed
+at 0.85; Cabtype selects the cabinet (1x12 / 2x12 / 4x12 multi-speaker
+synthesized IRs, crossfaded on switch):
 
 | Page | Knob | Param | Range | Maps to |
 |---|---|---|---|---|
@@ -24,15 +21,8 @@ Emo/Edge variant can be built by setting `AMP_PARAM_VOICE` to `1.0f` in
 | P2 | 2 | Master | 0..1 | PI + push-pull power drive + sag amount |
 | P2 | 3 | Level | 0..1 | output (0.20..0.90 gain) |
 | P3 | 1 | Neve | 0..1 | coloration wet/dry (0 = bypass) |
-| P3 | 2 | Cab | 0..1 | cabinet dark(0)..bright(1) |
-| P3 | 3 | Presence | 0..1 | speaker 3.5 kHz resonance |
-
-Voice: fixed Nashville (0). See above - the 9-knob ceiling leaves no slot
-for the VST's switch; bake an Emo/Edge variant instead.
-
-Input trim is fixed at 1.0 (the calibrated reference) and takes no knob:
-the pedal's hardware INPUT VOL does the level matching before the DSP,
-exactly like plugging into a tube amp.
+| P3 | 2 | Cabtype | 0..2 | cabinet: 0 = 1x12, 1 = 2x12, 2 = 4x12 |
+| P3 | 3 | Input | 0..1 | input trim 0.125x..1.25x (1.0 = calibrated ref) |
 
 ## State memory
 
@@ -57,9 +47,9 @@ gain 0.35, master 0.55, level 0.75, presence 0.85.
   undefined symbols, SBR/B14-relative relocations, missing `.audio` section.
 - NOT yet hardware-tested. The main open risk is CPU budget: ~1200
   operations per sample per channel (20 biquads + 1024-tap FIR + saturation)
-  is plausible for the C674x-class DSP but the ZDL host's per-effect time
-  slice is unmeasured. The 512-tap fallback is in `tools/gen_coeffs.py`
-  (`AMP_CAB_IR_N`). Follow the hardware test sequence below.
+  plus a second 1024-tap FIR during the ~12 ms cab crossfade (v17).
+  The 512-tap fallback is in `tools/gen_coeffs.py` (`CAB_IR_N`). Follow the
+  hardware test sequence below.
 
 ## Build requirements
 
@@ -95,8 +85,8 @@ here). Set `AMPNEVE_OPT_FOR_SPACE=n` only to experiment.
 ## Hardware test sequence (G1on)
 
 1. **Smoke**: build with `--smoke`, flash `dist_smoke/AmpNeve.ZDL`, verify
-   the effect appears in the AMP category, the three pages and the Voice
-   switch render, and knob turns do not freeze the pedal. A freeze here is a
+   the effect appears in the AMP category, the three pages render, and knob
+   turns do not freeze the pedal. A freeze here is a
    loader/edit-handler problem, not DSP.
 2. **Real DSP**: build normally, flash `dist/AmpNeve.ZDL`, play. Listen for
    dropouts, zipper noise, or freezes - these mean the per-effect CPU budget

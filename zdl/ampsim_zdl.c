@@ -2,26 +2,19 @@
  * ampsim_zdl.c -- AmpNeve for the Zoom MultiStomp (ZDL).
  *
  * Wraps the core (core/ampsim.c, inlined below) in the Zoom runtime ABI:
- *   - persistent state lives in the host-managed ctx[3] arena (2 x 1248
- *     floats, ~9.8 KB total - the arena is hundreds of KB)
+ *   - persistent state lives in the host-managed ctx[3] arena (2 x 2304
+ *     floats, ~18.4 KB total - the arena is hundreds of KB)
  *   - params come from the params[] table (see ampsim_zdl_params.h)
  *   - block processing: 8 samples L + 8 samples R, channel-interleaved
  *   - ctx[11]/ctx[12] magic shuttle preserved
  *
  * Nine knobs across three LineSel pages (mirrors the VST):
- * P1: Bass / Mid / Treble,  P2: Gain / Master / Level,  P3: Neve / Cab / Presence.
- *
- * Voice is FIXED to Nashville (0) on the pedal: the firmware's visible-knob
- * ceiling is 9 (3 pages x 3, see the reverson ABI.md 3.1), so the VST's
- * Voice switch has no ZDL slot. An Emo/Edge variant ZDL can be built by
- * setting AMP_PARAM_VOICE to 1.0f in amp_zdl_init below.
- *
- * Input trim is fixed at 1.0 (the calibrated reference) and takes no knob:
- * the pedal's hardware INPUT VOL sits before the DSP and does the level
- * matching, exactly like plugging into a real tube amp.
+ * P1: Bass / Mid / Treble,  P2: Gain / Master / Level,
+ * P3: Neve / Cabtype (1x12/2x12/4x12) / Input.
+ * Presence is fixed at 0.85 (no knob); single Nashville voice.
  *
  * Build (needs TI C6000 CGT, see zdl/README.md):
- *   cl6x --c99 --opt_level=2 --opt_for_space=3 -mv6740 --abi=eabi \
+ *   cl6x --c99 --opt_level=2 -mv6740 --abi=eabi \
  *        --mem_model:data=far --include_path=<repo>/core \
  *        -c ampsim_zdl.c -o ampsim_zdl.obj
  *   python3 build.py
@@ -51,9 +44,9 @@ AMP_CODE_SECTION(AMP_DRV_AUDIO_FUNC)
 #define AMP_RAW_TO_NORM 7.1428571f
 
 /* one Ampsim instance per channel; state float count is fixed generously.
-   The cabinet IR adds a 1024-float rolling delay per channel, so state is
-   ~4.8 KB/channel < 1248 floats = 4992 bytes (the arena is hundreds of KB). */
-#define AMP_STATE_FLOATS 1248u
+   v17: per-channel state = core (4792 B) + dual 1024-float IR delay buffers
+   (4096 B, crossfade) = 8888 B = 2222 floats; 2304 gives margin. */
+#define AMP_STATE_FLOATS 2304u
 
 typedef struct AmpZdlState {
     uint32_t magic;
@@ -99,14 +92,9 @@ static inline void amp_zdl_init(AmpZdlState *st)
     for (i = 0; i < AMP_STATE_FLOATS; ++i) { st->memL[i] = 0.0f; st->memR[i] = 0.0f; }
     if (Ampsim_init(&st->memL, AMP_STATE_FLOATS * sizeof(float), 44100.0f) == 0) return;
     if (Ampsim_init(&st->memR, AMP_STATE_FLOATS * sizeof(float), 44100.0f) == 0) return;
-    /* Input trim fixed at the calibrated reference (1.0); the hardware
-     * INPUT VOL handles level matching before the DSP. */
-    Ampsim_set_param((Ampsim *)&st->memL, AMP_PARAM_INPUT, 1.0f);
-    Ampsim_set_param((Ampsim *)&st->memR, AMP_PARAM_INPUT, 1.0f);
-    /* Voice fixed to Nashville (0): the 9-knob firmware ceiling leaves no
-     * room for the switch. Set to 1.0f to build an Emo/Edge variant ZDL. */
-    Ampsim_set_param((Ampsim *)&st->memL, AMP_PARAM_VOICE, 0.0f);
-    Ampsim_set_param((Ampsim *)&st->memR, AMP_PARAM_VOICE, 0.0f);
+    /* Presence fixed at 0.85 (no knob in the 9-slot layout). */
+    Ampsim_set_param((Ampsim *)&st->memL, AMP_PARAM_PRESENCE, 0.85f);
+    Ampsim_set_param((Ampsim *)&st->memR, AMP_PARAM_PRESENCE, 0.85f);
     st->magic = AMP_MAGIC;
     st->version = AMP_VERSION;
     st->initialized = 1u;
@@ -152,8 +140,16 @@ void AMP_DRV_AUDIO_FUNC(unsigned int *ctx)
     float master   = amp_param_norm(params[AMPNEVE_MASTER_SLOT],   AMPNEVE_MASTER_DEFAULT_NORM);
     float level    = amp_param_norm(params[AMPNEVE_LEVEL_SLOT],    AMPNEVE_LEVEL_DEFAULT_NORM);
     float neve     = amp_param_norm(params[AMPNEVE_NEVE_SLOT],     AMPNEVE_NEVE_DEFAULT_NORM);
-    float cab      = amp_param_norm(params[AMPNEVE_CAB_SLOT],      AMPNEVE_CAB_DEFAULT_NORM);
-    float presence = amp_param_norm(params[AMPNEVE_PRESENCE_SLOT], AMPNEVE_PRESENCE_DEFAULT_NORM);
+    /* Cabtype: raw 0..2 (a knob scaled to 0..2 by the host); normalize. */
+    float cabtype  = 0.0f;
+    {
+        float raw = params[AMPNEVE_CABTYPE_SLOT];
+        if (raw > 1.0f && raw <= 100.0f) raw = raw * 0.02f;   /* 0..100 -> 0..2 */
+        if (raw < 0.0f) raw = 0.0f;
+        if (raw > 2.0f) raw = 2.0f;
+        cabtype = raw;
+    }
+    float input    = amp_param_norm(params[AMPNEVE_INPUT_SLOT],    AMPNEVE_INPUT_DEFAULT_NORM);
 
     Ampsim *aL = (Ampsim *)&st->memL;
     Ampsim *aR = (Ampsim *)&st->memR;
@@ -164,8 +160,8 @@ void AMP_DRV_AUDIO_FUNC(unsigned int *ctx)
     Ampsim_set_param(aL, AMP_PARAM_MASTER,   master);
     Ampsim_set_param(aL, AMP_PARAM_LEVEL,    level);
     Ampsim_set_param(aL, AMP_PARAM_NEVE,     neve);
-    Ampsim_set_param(aL, AMP_PARAM_CAB,      cab);
-    Ampsim_set_param(aL, AMP_PARAM_PRESENCE, presence);
+    Ampsim_set_param(aL, AMP_PARAM_CABTYPE,  cabtype);
+    Ampsim_set_param(aL, AMP_PARAM_INPUT,    input);
     Ampsim_set_param(aR, AMP_PARAM_BASS,     bass);
     Ampsim_set_param(aR, AMP_PARAM_MID,      mid);
     Ampsim_set_param(aR, AMP_PARAM_TREBLE,   treble);
@@ -173,8 +169,8 @@ void AMP_DRV_AUDIO_FUNC(unsigned int *ctx)
     Ampsim_set_param(aR, AMP_PARAM_MASTER,   master);
     Ampsim_set_param(aR, AMP_PARAM_LEVEL,    level);
     Ampsim_set_param(aR, AMP_PARAM_NEVE,     neve);
-    Ampsim_set_param(aR, AMP_PARAM_CAB,      cab);
-    Ampsim_set_param(aR, AMP_PARAM_PRESENCE, presence);
+    Ampsim_set_param(aR, AMP_PARAM_CABTYPE,  cabtype);
+    Ampsim_set_param(aR, AMP_PARAM_INPUT,    input);
 
     int i;
     for (i = 0; i < 8; i++) {

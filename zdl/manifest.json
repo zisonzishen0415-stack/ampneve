@@ -1,6 +1,6 @@
 {
   "effect_name": "AmpNeve",
-  "comment": "Custom boutique amp + cabinet + Neve-style coloration for the Zoom MultiStomp. Original DSP (not a stock clone), strict real-amp structure (v15): V1 fixed ~4x gain + Miller LP @9k -> V2 cold clipper (Gain + touch dynamics) + Miller LP @5k -> Klon-style clean/dirty mix -> tone network Bass/Mid/Treble -> phase inverter + push-pull power stage with sag (Master) -> Neve transformer even harmonics + 1073-style EQ (Neve, wet/dry) -> speaker resonance + cabinet (Cab dark..bright, Presence) -> Level. Nine knobs, three pages x three, mirroring the VST: P1 Bass/Mid/Treble, P2 Gain/Master/Level, P3 Neve/Cab/Presence. Voice is fixed to Nashville on the pedal: the firmware's visible-knob ceiling is 9 (3 pages x 3, ABI.md 3.1), so the VST's Voice switch has no ZDL slot. Params persist with the pedal patch (save the patch to remember the settings).",
+  "comment": "Custom boutique amp + cabinet + Neve-style coloration for the Zoom MultiStomp. Original DSP (not a stock clone), strict real-amp structure (v17): V1 fixed ~4x gain + Miller LP @9k -> V2 cold clipper (Gain + touch dynamics) + Miller LP @5k -> Klon-style clean/dirty mix -> tone network Bass/Mid/Treble -> phase inverter + push-pull power stage with sag (Master) -> Neve transformer even harmonics + 1073-style EQ (Neve, wet/dry) -> speaker resonance + cabinet voicing + 1024-tap miked-cab IR -> Level. Nine knobs, three pages x three: P1 Bass/Mid/Treble, P2 Gain/Master/Level, P3 Neve/Cabtype/Input. Cabtype selects the cabinet: 0 = 1x12, 1 = 2x12, 2 = 4x12 (multi-speaker synthesized IRs, crossfaded on switch). Single Nashville voice. Params persist with the pedal patch (save the patch to remember the settings).",
   "audio_func_name": "Fx_AMP_AmpNeve",
   "gid": 4,
   "gid_comment": "0x04 = AMP category. SONAME prefix becomes ZDL_AMP_.",
@@ -87,26 +87,26 @@
       "comment": "Neve coloration amount: transformer even harmonics + 1073 EQ wet/dry (0 = bypass)."
     },
     {
-      "name": "Cab",
+      "name": "Cabtype",
       "type": "knob",
-      "max": 100,
-      "default": 50,
+      "max": 2,
+      "default": 0,
       "scale": "linear",
       "audio_min": 0.0,
-      "audio_max": 1.0,
-      "audio_default": 0.5,
-      "comment": "Cabinet voicing dark(0)..bright(1)."
+      "audio_max": 2.0,
+      "audio_default": 0.0,
+      "comment": "Cabinet: 0 = 1x12, 1 = 2x12, 2 = 4x12 (multi-speaker synthesized miked-cab IRs, crossfaded)."
     },
     {
-      "name": "Presence",
+      "name": "Input",
       "type": "knob",
       "max": 100,
       "default": 100,
-      "scale": "linear",
+      "scale": "gain",
       "audio_min": 0.0,
       "audio_max": 1.0,
       "audio_default": 1.0,
-      "comment": "Speaker 3.5 kHz resonance amount (0 = off, 1 = full)."
+      "comment": "Input trim 0.125x..1.25x (1.0 = calibrated reference for a -12..-6 dBFS DI)."
     }
   ],
   "audio_nop": false

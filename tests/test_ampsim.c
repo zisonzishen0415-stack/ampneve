@@ -217,22 +217,34 @@ int main(void) {
         CHECK(r_neve_on > 1.03f * r_neve_off, "neve knob changes coloration");
     }
 
-    /* 10. cab knob: dark (0) vs bright (1) differ at 6 kHz */
+    /* 10. cabtype: 1x12 vs 2x12 vs 4x12 differ (multi-speaker summing +
+     *      per-cab voicing); the low end also shifts (2x12/4x12 bigger body). */
     {
         Ampsim_set_param(a, AMP_PARAM_NEVE, 1.0f);
         Ampsim_set_param(a, AMP_PARAM_PRESENCE, 1.0f);
-        Ampsim_set_param(a, AMP_PARAM_CAB, 0.0f);
+        Ampsim_set_param(a, AMP_PARAM_CABTYPE, 0.0f);   /* 1x12 */
         Ampsim_reset(a);
-        float r_cab_dark = run_rms(a, 6000.0f, 0.06f, 32768u, 16384u);
-        Ampsim_set_param(a, AMP_PARAM_CAB, 1.0f);
+        float r_cab_1x12 = run_rms(a, 6000.0f, 0.06f, 32768u, 16384u);
+        Ampsim_set_param(a, AMP_PARAM_CABTYPE, 1.0f);   /* 2x12 */
         Ampsim_reset(a);
-        float r_cab_bright = run_rms(a, 6000.0f, 0.06f, 32768u, 16384u);
-        CHECK(r_cab_bright > 1.03f * r_cab_dark, "cab knob shifts high-end voicing");
+        float r_cab_2x12 = run_rms(a, 900.0f, 0.12f, 32768u, 16384u);
+        Ampsim_set_param(a, AMP_PARAM_CABTYPE, 2.0f);   /* 4x12 */
+        Ampsim_reset(a);
+        float r_cab_4x12 = run_rms(a, 900.0f, 0.12f, 32768u, 16384u);
+        CHECK(fabsf(r_cab_1x12 - r_cab_2x12) > 0.01f * r_cab_1x12, "cabtype 1x12 vs 2x12 differ");
+        CHECK(fabsf(r_cab_4x12 - r_cab_2x12) > 0.01f * r_cab_2x12, "cabtype 2x12 vs 4x12 differ");
+        Ampsim_set_param(a, AMP_PARAM_CABTYPE, 0.0f);
+        Ampsim_reset(a);
+        float r_low_1x12 = run_rms(a, 110.0f, 0.10f, 32768u, 16384u);
+        Ampsim_set_param(a, AMP_PARAM_CABTYPE, 2.0f);   /* 4x12: bigger low end */
+        Ampsim_reset(a);
+        float r_low_4x12 = run_rms(a, 110.0f, 0.10f, 32768u, 16384u);
+        CHECK(r_low_4x12 > r_low_1x12, "4x12 has more low end than 1x12");
+        CHECK(Ampsim_get_param(a, AMP_PARAM_CABTYPE) == 2.0f, "cabtype param round-trip");
     }
 
     /* 11. presence knob: off (0) vs full (1) differ at 3.5 kHz */
     {
-        Ampsim_set_param(a, AMP_PARAM_CAB, 0.5f);
         Ampsim_set_param(a, AMP_PARAM_PRESENCE, 0.0f);
         Ampsim_reset(a);
         float r_pres_off = run_rms(a, 3500.0f, 0.06f, 32768u, 16384u);
@@ -262,7 +274,7 @@ int main(void) {
         CHECK(fabsf(Ampsim_input_gain(0.0f) - 0.125f) < 1e-6f, "input gain floor = 0.125");
     }
 
-    /* 13. voice switch: Emo/Edge raises the gain base (earlier breakup) */
+    /* 13. cabtype switch changes the IR/gain character (round-trip) */
     {
         Ampsim_set_param(a, AMP_PARAM_GAIN, 0.30f);
         Ampsim_set_param(a, AMP_PARAM_BASS, 0.5f);
@@ -270,16 +282,14 @@ int main(void) {
         Ampsim_set_param(a, AMP_PARAM_TREBLE, 0.5f);
         Ampsim_set_param(a, AMP_PARAM_MASTER, 0.5f);
         Ampsim_set_param(a, AMP_PARAM_LEVEL, 0.8f);
-        Ampsim_set_param(a, AMP_PARAM_VOICE, 0.0f);
+        Ampsim_set_param(a, AMP_PARAM_CABTYPE, 0.0f);
         Ampsim_reset(a);
-        /* 900 Hz: both voices' cabinet IRs are ~equal there, so the RMS
-         * difference is driven by the gain-stage base, not the IR comb. */
-        float r_nash = run_rms(a, 900.0f, 0.30f, 32768u, 16384u);
-        Ampsim_set_param(a, AMP_PARAM_VOICE, 1.0f);
+        float r_c0 = run_rms(a, 900.0f, 0.30f, 32768u, 16384u);
+        Ampsim_set_param(a, AMP_PARAM_CABTYPE, 1.0f);
         Ampsim_reset(a);
-        float r_emo = run_rms(a, 900.0f, 0.30f, 32768u, 16384u);
-        CHECK(r_emo > 1.02f * r_nash, "Emo/Edge voice breaks up earlier (higher gain base)");
-        CHECK(Ampsim_get_param(a, AMP_PARAM_VOICE) == 1.0f, "voice param round-trip");
+        float r_c1 = run_rms(a, 900.0f, 0.30f, 32768u, 16384u);
+        CHECK(fabsf(r_c1 - r_c0) > 0.005f * r_c0, "cabtype changes the tone");
+        CHECK(Ampsim_get_param(a, AMP_PARAM_CABTYPE) == 1.0f, "cabtype param round-trip");
     }
 
     /* 14. redundant same-value set_param must not reset filter states
@@ -308,24 +318,22 @@ int main(void) {
             Ampsim_set_param(b, AMP_PARAM_LEVEL, 0.8f);
             Ampsim_set_param(a, AMP_PARAM_NEVE, 1.0f);
             Ampsim_set_param(b, AMP_PARAM_NEVE, 1.0f);
-            Ampsim_set_param(a, AMP_PARAM_CAB, 0.5f);
-            Ampsim_set_param(b, AMP_PARAM_CAB, 0.5f);
             Ampsim_set_param(a, AMP_PARAM_PRESENCE, 1.0f);
             Ampsim_set_param(b, AMP_PARAM_PRESENCE, 1.0f);
-            Ampsim_set_param(a, AMP_PARAM_VOICE, 0.0f);
-            Ampsim_set_param(b, AMP_PARAM_VOICE, 0.0f);
+            Ampsim_set_param(a, AMP_PARAM_CABTYPE, 0.0f);
+            Ampsim_set_param(b, AMP_PARAM_CABTYPE, 0.0f);
             Ampsim_reset(a); Ampsim_reset(b);
             int mismatch = 0;
             for (int i = 0; i < 16384; ++i) {
                 float t = (float)i / 44100.0f;
                 float in = 0.4f * sinf(2.0f * 3.14159265f * 220.0f * t);
-                if ((i % 64) == 0) Ampsim_set_param(a, AMP_PARAM_VOICE, 0.0f); /* redundant */
+                if ((i % 64) == 0) Ampsim_set_param(a, AMP_PARAM_CABTYPE, 0.0f); /* redundant */
                 float oa = 0.0f, ob = 0.0f;
                 Ampsim_process(a, in, &oa);
                 Ampsim_process(b, in, &ob);
                 if (fabsf(oa - ob) > 1e-5f) { mismatch = 1; break; }
             }
-            CHECK(!mismatch, "redundant voice set_param does not reset filters");
+            CHECK(!mismatch, "redundant cabtype set_param does not reset filters");
             free(memB);
         }
     }
@@ -358,8 +366,9 @@ int main(void) {
         CHECK(late_nz == 1 && e_late < e_tail, "IR tail decays toward zero");
     }
 
-    /* 17. voice switch mid-stream must not pop: swapping the IR pointer with
-     *      a shared delay buffer keeps the convolution continuous (no reset). */
+    /* 17. cabtype switch mid-stream must not pop: swapping the IR pointer
+     *      with a shared delay buffer keeps the convolution continuous (no
+     *      reset). */
     {
         Ampsim_set_param(a, AMP_PARAM_GAIN, 0.4f);
         Ampsim_set_param(a, AMP_PARAM_BASS, 0.5f);
@@ -367,7 +376,7 @@ int main(void) {
         Ampsim_set_param(a, AMP_PARAM_TREBLE, 0.5f);
         Ampsim_set_param(a, AMP_PARAM_MASTER, 0.5f);
         Ampsim_set_param(a, AMP_PARAM_LEVEL, 0.8f);
-        Ampsim_set_param(a, AMP_PARAM_VOICE, 0.0f);
+        Ampsim_set_param(a, AMP_PARAM_CABTYPE, 0.0f);
         Ampsim_reset(a);
         float prev = 0.0f, worst = 0.0f;
         for (int i = 0; i < 8192; ++i) {
@@ -375,7 +384,7 @@ int main(void) {
             float in = 0.2f * sinf(2.0f * 3.14159265f * 220.0f * t);
             float ov2 = 0.0f;
             Ampsim_process(a, in, &ov2);
-            if (i == 4096) Ampsim_set_param(a, AMP_PARAM_VOICE, 1.0f); /* mid-stream */
+            if (i == 4096) Ampsim_set_param(a, AMP_PARAM_CABTYPE, 1.0f); /* mid-stream */
             float d = ov2 - prev;
             if (d < 0.0f) d = -d;
             if (d > worst) worst = d;
@@ -383,7 +392,8 @@ int main(void) {
         }
         /* a pop would show up as a step far larger than the sine's slope */
         float slope = 0.2f * 2.0f * 3.14159265f * 220.0f / 44100.0f;
-        CHECK(worst < 40.0f * slope + 1e-5f, "voice switch mid-stream does not pop");
+        printf("    cabtype-switch worst step = %.5f (limit %.4f)\n", worst, 40.0f * slope + 1e-5f);
+        CHECK(worst < 40.0f * slope + 1e-5f, "cabtype switch mid-stream does not pop");
     }
 
     /* 18. redundant same-value BASS/MID/TREBLE set_param must not reset the
@@ -407,9 +417,8 @@ int main(void) {
             Ampsim_set_param(a, AMP_PARAM_LEVEL, 1.0f); Ampsim_set_param(b, AMP_PARAM_LEVEL, 1.0f);
             Ampsim_set_param(a, AMP_PARAM_INPUT, 1.0f); Ampsim_set_param(b, AMP_PARAM_INPUT, 1.0f);
             Ampsim_set_param(a, AMP_PARAM_NEVE, 1.0f); Ampsim_set_param(b, AMP_PARAM_NEVE, 1.0f);
-            Ampsim_set_param(a, AMP_PARAM_CAB, 0.5f); Ampsim_set_param(b, AMP_PARAM_CAB, 0.5f);
             Ampsim_set_param(a, AMP_PARAM_PRESENCE, 1.0f); Ampsim_set_param(b, AMP_PARAM_PRESENCE, 1.0f);
-            Ampsim_set_param(a, AMP_PARAM_VOICE, 0.0f); Ampsim_set_param(b, AMP_PARAM_VOICE, 0.0f);
+            Ampsim_set_param(a, AMP_PARAM_CABTYPE, 0.0f); Ampsim_set_param(b, AMP_PARAM_CABTYPE, 0.0f);
             Ampsim_reset(a); Ampsim_reset(b);
             int mismatch = 0;
             for (int i = 0; i < 16384; ++i) {
@@ -443,7 +452,6 @@ int main(void) {
         Ampsim_set_param(a, AMP_PARAM_TREBLE, 0.5f);
         Ampsim_set_param(a, AMP_PARAM_MASTER, 1.0f);
         Ampsim_set_param(a, AMP_PARAM_LEVEL, 1.0f);
-        Ampsim_set_param(a, AMP_PARAM_VOICE, 0.0f);
         Ampsim_reset(a);
         int warm = (int)(0.5f * 44100.0f);
         int n = 8192;
@@ -477,7 +485,6 @@ int main(void) {
         Ampsim_set_param(a, AMP_PARAM_GAIN, 1.0f);
         Ampsim_set_param(a, AMP_PARAM_MASTER, 1.0f);
         Ampsim_set_param(a, AMP_PARAM_LEVEL, 1.0f);
-        Ampsim_set_param(a, AMP_PARAM_VOICE, 0.0f);
         Ampsim_reset(a);
         int warm = (int)(0.5f * 44100.0f);
         int n = 8192;

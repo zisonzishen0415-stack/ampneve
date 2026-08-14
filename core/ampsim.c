@@ -13,8 +13,7 @@ typedef struct {
     /* params */
     float input;               /* input trim, 0..1 (1.0 = calibrated ref) */
     float gain, bass, mid, treble, master, level;
-    float voice;               /* 0 = Nashville, 1 = Emo/Edge */
-    float gain_base;           /* voice-dependent V2 drive base */
+    float cabtype;             /* cabinet: 0 = 1x12, 1 = 2x12, 2 = 4x12 */
     float dry_mix;             /* Klon dry amount: more dry when clean */
     float sample_rate;
 
@@ -46,12 +45,15 @@ typedef struct {
 
     /* speaker + cabinet */
     Bq reso_low, reso_high;
-    Bq cab_dark[AMP_CAB_DARK_N];
-    Bq cab_bright[AMP_CAB_BRIGHT_N];
+    Bq cab_voice[AMP_CAB_VOICE_N];   /* selected cab's voicing chain */
     const float* ir;             /* active cabinet IR (static const) */
-    float ir_delay[AMP_CAB_IR_N]; /* rolling convolution delay buffer */
-    int ir_idx;                   /* write position into ir_delay */
-    float cab_tone;             /* dark..bright blend (0..1) */
+    const float* ir_prev;        /* cab being faded out (while fade < 1) */
+    float ir_delay_a[AMP_CAB_IR_N]; /* rolling convolution delay, always
+                                       written so either kernel can be faded
+                                       in with full history */
+    float ir_delay_b[AMP_CAB_IR_N];
+    int ir_idx;                   /* write position (shared by both buffers) */
+    float fade;                   /* 0..1 crossfade from ir_prev to ir */
     float presence;             /* speaker 3.5kHz resonance amount, 0..1 */
 
     /* level */
@@ -70,6 +72,15 @@ static void bq_load(Bq* b, const AmpBiquad* c) {
     b->b0 = c->b0; b->b1 = c->b1; b->b2 = c->b2;
     b->a1 = c->a1; b->a2 = c->a2;
     b->v1 = 0.0f; b->v2 = 0.0f;
+}
+
+/* bq_load that PRESERVES the filter state: used for cabtype switches so
+ * swapping IR/voicing mid-stream does not zero the filter memory and pop
+ * (the delay-line convolution is already continuous; the biquads must be
+ * too). Fresh state is guaranteed by Ampsim_reset after init. */
+static void bq_load_keep(Bq* b, const AmpBiquad* c) {
+    b->b0 = c->b0; b->b1 = c->b1; b->b2 = c->b2;
+    b->a1 = c->a1; b->a2 = c->a2;
 }
 
 static float bq_run(Bq* b, float x) {
@@ -166,27 +177,27 @@ static void tone_peaking(Bq* b, float cosw, float alpha, float A) {
     b->v1 = b->v2 = 0.0f;
 }
 
-/* Reload the voice-dependent fixed stages (Neve EQ, cab voicing, mic
- * pickup). Tone-network coefficients are NOT touched - they follow the
- * Bass/Mid/Treble knobs and must survive a voice switch. */
-static void update_voice_coeffs(Ampsim* a) {
+/* Reload the cabtype-dependent fixed stages (speaker resonance, cab
+ * voicing chain). The IR swap + crossfade is handled by set_param.
+ * Biquad STATE is preserved (bq_load_keep) so switching cab mid-stream
+ * does not pop. */
+static void update_cab_coeffs(Ampsim* a) {
     AmpsimState* s = &a->s;
     int i;
-    int emo = s->voice >= 0.5f ? 1 : 0;
+    int ct = (s->cabtype >= 0.5f) ? 1 : 0;
+    if (s->cabtype >= 1.5f) ct = 2;
+    if (ct >= AMP_CAB_TYPES) ct = AMP_CAB_TYPES - 1;
     for (i = 0; i < AMP_NEVE_N; ++i)
-        bq_load(&s->neve_bq[i], emo ? &AMP_NEVE_EMO[i] : &AMP_NEVE[i]);
-    for (i = 0; i < AMP_CAB_DARK_N; ++i)
-        bq_load(&s->cab_dark[i], emo ? &AMP_CAB_DARK_EMO[i] : &AMP_CAB_DARK[i]);
-    for (i = 0; i < AMP_CAB_BRIGHT_N; ++i)
-        bq_load(&s->cab_bright[i], emo ? &AMP_CAB_BRIGHT_EMO[i] : &AMP_CAB_BRIGHT[i]);
-    bq_load(&s->reso_low, &AMP_RESO_LOW);
-    bq_load(&s->reso_high, &AMP_RESO_HIGH);
-    s->ir = emo ? AMP_CAB_IR_EMO : AMP_CAB_IR_NASH;
+        bq_load_keep(&s->neve_bq[i], &AMP_NEVE[i]);
+    for (i = 0; i < AMP_CAB_VOICE_N; ++i)
+        bq_load_keep(&s->cab_voice[i], &AMP_CAB_VOICE[ct][i]);
+    bq_load_keep(&s->reso_low, &AMP_CAB_RESO_LOW[ct]);
+    bq_load_keep(&s->reso_high, &AMP_CAB_RESO_HIGH[ct]);
 }
 
 static void update_stage_coeffs(Ampsim* a) {
     AmpsimState* s = &a->s;
-    update_voice_coeffs(a);
+    update_cab_coeffs(a);
     bq_load(&s->pre_lp1, &AMP_PRE_LP1);
     bq_load(&s->pre_lp2, &AMP_PRE_LP2);
     tone_peaking(&s->tone_bass,   AMP_TONE_BASS_COSW,   AMP_TONE_BASS_ALPHA,   1.0f);
@@ -199,15 +210,16 @@ void Ampsim_reset(Ampsim* a) {
     AmpsimState* s = &a->s;
     int i;
     for (i = 0; i < 3; ++i) { s->neve_bq[i].v1 = s->neve_bq[i].v2 = 0.0f; }
-    for (i = 0; i < AMP_CAB_DARK_N; ++i) { s->cab_dark[i].v1 = s->cab_dark[i].v2 = 0.0f; }
-    for (i = 0; i < AMP_CAB_BRIGHT_N; ++i) { s->cab_bright[i].v1 = s->cab_bright[i].v2 = 0.0f; }
+    for (i = 0; i < AMP_CAB_VOICE_N; ++i) { s->cab_voice[i].v1 = s->cab_voice[i].v2 = 0.0f; }
     s->reso_low.v1 = s->reso_low.v2 = 0.0f;
     s->reso_high.v1 = s->reso_high.v2 = 0.0f;
     s->pre_lp1.v1 = s->pre_lp1.v2 = 0.0f;
     s->pre_lp2.v1 = s->pre_lp2.v2 = 0.0f;
-    for (i = 0; i < AMP_CAB_IR_N; ++i) s->ir_delay[i] = 0.0f;
+    for (i = 0; i < AMP_CAB_IR_N; ++i) { s->ir_delay_a[i] = 0.0f; s->ir_delay_b[i] = 0.0f; }
     s->ir_idx = 0;
-    s->ir = (s->voice >= 0.5f) ? AMP_CAB_IR_EMO : AMP_CAB_IR_NASH;
+    s->ir = (s->cabtype >= 1.5f) ? AMP_CAB_IR_4X12 : (s->cabtype >= 0.5f ? AMP_CAB_IR_2X12 : AMP_CAB_IR_1X12);
+    s->ir_prev = s->ir;
+    s->fade = 1.0f;
     s->tone_bass.v1 = s->tone_bass.v2 = 0.0f;
     s->tone_mid.v1 = s->tone_mid.v2 = 0.0f;
     s->tone_treble.v1 = s->tone_treble.v2 = 0.0f;
@@ -225,23 +237,21 @@ Ampsim* Ampsim_init(void* mem, uint32_t bytes, float sample_rate) {
     s->sample_rate = sample_rate;
 
     s->input = 1.0f;
-    s->voice = 0.0f;
-    s->gain_base = 0.2f;
+    s->cabtype = 0.0f;
     s->gain = 0.35f;
     s->dry_mix = 0.40f - 0.17f * s->gain;
     s->bass = s->mid = s->treble = 0.50f;
     s->master = 0.55f;
     s->level = 0.75f;
     s->neve = 1.0f;
-    s->cab_tone = 0.5f;
     s->presence = 0.85f;
 
     s->in_g = Ampsim_input_gain(s->input);
     /* V2 cold-clipper drive: moderate at low knob (edge-of-breakup at the
-     * 0.25 default), ~15.5x at max -> ~62x preamp total with V1's fixed 4x.
+     * 0.35 default), ~15.5x at max -> ~62x preamp total with V1's fixed 4x.
      * A real preamp stacks moderate per-stage gain instead of one giant
      * gain stage, and each stage's Miller LP shapes its harmonics. */
-    s->v2_drive = s->gain_base + 1.5f * s->gain + 16.0f * s->gain * s->gain;
+    s->v2_drive = 0.2f + 1.5f * s->gain + 16.0f * s->gain * s->gain;
     s->pi_drive = 0.35f + 0.65f * s->master;
     s->pp_drive = 0.30f + 0.75f * s->master;
     s->sag_amt = 0.24f * s->master;
@@ -261,8 +271,13 @@ Ampsim* Ampsim_init(void* mem, uint32_t bytes, float sample_rate) {
 
 void Ampsim_set_param(Ampsim* a, AmpsimParam p, float v) {
     if (!a) return;
-    if (v < 0.0f) v = 0.0f;
-    if (v > 1.0f) v = 1.0f;
+    if (p == AMP_PARAM_CABTYPE) {
+        if (v < 0.0f) v = 0.0f;
+        if (v > 2.0f) v = 2.0f;   /* 0..2: 1x12 / 2x12 / 4x12 */
+    } else {
+        if (v < 0.0f) v = 0.0f;
+        if (v > 1.0f) v = 1.0f;
+    }
     AmpsimState* s = &a->s;
     /* if-else chain, NOT switch: cl6x lowers a switch to a $C$SW jump
      * table in a .switch: section, and the reverson ZDL linker does not
@@ -273,16 +288,19 @@ void Ampsim_set_param(Ampsim* a, AmpsimParam p, float v) {
         s->in_g = Ampsim_input_gain(v);
     } else if (p == AMP_PARAM_GAIN) {
         s->gain = v;
-        s->v2_drive = s->gain_base + 1.5f * v + 16.0f * v * v;
+        s->v2_drive = 0.2f + 1.5f * v + 16.0f * v * v;
         s->dry_mix = 0.40f - 0.17f * v;
-    } else if (p == AMP_PARAM_VOICE) {
-        float nv = (v >= 0.5f) ? 1.0f : 0.0f;
-        if (nv != s->voice) {
-            s->voice = nv;
-            s->gain_base = (nv >= 0.5f) ? 0.35f : 0.2f;
-            s->v2_drive = s->gain_base + 1.5f * s->gain + 16.0f * s->gain * s->gain;
-            s->dry_mix = 0.40f - 0.17f * s->gain;
-            update_voice_coeffs(a);
+    } else if (p == AMP_PARAM_CABTYPE) {
+        float nv = (v >= 1.5f) ? 2.0f : (v >= 0.5f ? 1.0f : 0.0f);
+        if (nv != s->cabtype) {
+            s->cabtype = nv;
+            /* IR crossfade: keep the old kernel until the fade completes,
+             * both delay buffers always track the input, so the new kernel
+             * has full history. */
+            s->ir_prev = s->ir;
+            s->ir = (nv >= 1.5f) ? AMP_CAB_IR_4X12 : (nv >= 0.5f ? AMP_CAB_IR_2X12 : AMP_CAB_IR_1X12);
+            s->fade = 0.0f;
+            update_cab_coeffs(a);
         }
     } else if (p == AMP_PARAM_BASS) {
         if (v != s->bass) {
@@ -309,8 +327,6 @@ void Ampsim_set_param(Ampsim* a, AmpsimParam p, float v) {
         s->level_gain = 0.20f + 0.70f * v;
     } else if (p == AMP_PARAM_NEVE) {
         s->neve = v;
-    } else if (p == AMP_PARAM_CAB) {
-        s->cab_tone = v;
     } else if (p == AMP_PARAM_PRESENCE) {
         s->presence = v;
     }
@@ -328,9 +344,8 @@ float Ampsim_get_param(const Ampsim* a, AmpsimParam p) {
     else if (p == AMP_PARAM_MASTER)    return s->master;
     else if (p == AMP_PARAM_LEVEL)     return s->level;
     else if (p == AMP_PARAM_NEVE)      return s->neve;
-    else if (p == AMP_PARAM_CAB)       return s->cab_tone;
     else if (p == AMP_PARAM_PRESENCE)  return s->presence;
-    else if (p == AMP_PARAM_VOICE)     return s->voice;
+    else if (p == AMP_PARAM_CABTYPE)   return s->cabtype;
     return 0.0f;
 }
 
@@ -422,35 +437,46 @@ void Ampsim_process(Ampsim* a, float in, float* out) {
         x = dry * (1.0f - s->neve) + (y * 0.9f) * s->neve;  /* 1073 trim in wet */
     }
 
-    /* 8. speaker resonance + cabinet voicing */
+    /* 8. speaker resonance + cabinet voicing (selected cab type) */
     x = bq_run(&s->reso_low, x);
     {
         float dry = x;
         float wet = bq_run(&s->reso_high, dry);
         x = dry * (1.0f - s->presence) + wet * s->presence;
     }
-    {
-        float dark = x, bright = x;
-        for (i = 0; i < AMP_CAB_DARK_N; ++i) dark = bq_run(&s->cab_dark[i], dark);
-        for (i = 0; i < AMP_CAB_BRIGHT_N; ++i) bright = bq_run(&s->cab_bright[i], bright);
-        x = dark * (1.0f - s->cab_tone) + bright * s->cab_tone;
-    }
+    for (i = 0; i < AMP_CAB_VOICE_N; ++i) x = bq_run(&s->cab_voice[i], x);
 
     /* 9. cabinet IR convolution (static 1024-tap miked-cab kernel: mic
      * pickup + speaker-cone resonances + room).  This is the link that
      * makes it read as a miked cab instead of an EQ'd DI - real cones
      * ring and real mics hear a room, and convolution carries that time
-     * structure.  No division, no modulo: ring-buffer wrap by branch. */
+     * structure.  No division, no modulo: ring-buffer wrap by branch.
+     * Two delay buffers are always written so a cab switch can crossfade
+     * between kernels (s->fade) with full history for both. */
     {
         int idx = s->ir_idx;
         float acc = 0.0f;
-        s->ir_delay[idx] = x;
+        s->ir_delay_a[idx] = x;
+        s->ir_delay_b[idx] = x;
         for (i = 0; i < AMP_CAB_IR_N; ++i) {
-            acc += s->ir_delay[idx] * s->ir[i];
+            acc += s->ir_delay_a[idx] * s->ir[i];
             idx = (idx == 0) ? (AMP_CAB_IR_N - 1) : (idx - 1);
         }
         s->ir_idx = (s->ir_idx == (AMP_CAB_IR_N - 1)) ? 0 : (s->ir_idx + 1);
-        x = acc;
+        if (s->fade < 1.0f) {
+            /* crossfading: also convolve the outgoing kernel, blend */
+            int idx2 = s->ir_idx;
+            float acc2 = 0.0f;
+            for (i = 0; i < AMP_CAB_IR_N; ++i) {
+                acc2 += s->ir_delay_b[idx2] * s->ir_prev[i];
+                idx2 = (idx2 == 0) ? (AMP_CAB_IR_N - 1) : (idx2 - 1);
+            }
+            s->fade += 0.001953125f;   /* 1/512: ~11.6 ms crossfade */
+            if (s->fade > 1.0f) s->fade = 1.0f;
+            x = acc * s->fade + acc2 * (1.0f - s->fade);
+        } else {
+            x = acc;
+        }
     }
 
     /* 10. level */

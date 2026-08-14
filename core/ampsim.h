@@ -16,9 +16,9 @@
  *   speaker/cab       resonance + voicing + 1024-tap miked-cab IR
  *   level
  *
- * Voice switch (0 = Nashville session, 1 = Emo/Edge): swaps the Neve EQ,
- * cab voicing and the cabinet IR, and raises the gain-stage base so edge
- * breakup arrives earlier - one pedal-style toggle, per-voice static IRs.
+ * Cab type (v17): 0 = 1x12, 1 = 2x12, 2 = 4x12 - swaps the speaker
+ * resonance, the cab voicing chain and the miked-cab IR kernel. Single
+ * voice (Nashville character) - the Emo/Edge voice was merged away.
  *
  * ZDL-safe: no heap (caller memory), no double, no sinf/cosf/powf/logf,
  * no division in the audio path, no large writable statics (the cabinet
@@ -36,7 +36,7 @@
 extern "C" {
 #endif
 
-#define AMPNEVE_NUM_PARAMS 11u
+#define AMPNEVE_NUM_PARAMS 10u
 
 typedef enum {
     AMP_PARAM_INPUT = 0,  /* input trim, 0..1 (1.0 = calibrated ref) */
@@ -47,9 +47,8 @@ typedef enum {
     AMP_PARAM_MASTER,      /* power-stage drive + sag amount, 0..1 */
     AMP_PARAM_LEVEL,       /* output level, 0..1 (0.5..1.5 gain) */
     AMP_PARAM_NEVE,        /* Neve coloration amount, 0..1 (0 = bypass) */
-    AMP_PARAM_CAB,         /* cabinet voicing, 0..1 (0 = dark, 1 = bright) */
     AMP_PARAM_PRESENCE,    /* speaker 3.5kHz resonance amount, 0..1 */
-    AMP_PARAM_VOICE        /* voice: 0 = Nashville, 1 = Emo/Edge */
+    AMP_PARAM_CABTYPE      /* cabinet: 0 = 1x12, 1 = 2x12, 2 = 4x12 */
 } AmpsimParam;
 
 /* Maps the 0..1 Input knob to a linear input gain: 0.125x..1.25x,

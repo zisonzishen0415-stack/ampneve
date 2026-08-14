@@ -10,9 +10,9 @@ AmpNeveAudioProcessor::createParameterLayout() {
             id, name, juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), def));
     };
     /* 9 knobs, three pages x 3 (tone / amp / voicing), pedal style. The
-     * defaults are a balanced edge-of-breakup patch (the "Edge / Breakup"
-     * factory preset): touch dynamics on the pick, warm power stage,
-     * slightly tamed presence. */
+     * defaults are a balanced edge-of-breakup patch: touch dynamics on the
+     * pick, warm power stage, Neve color on. Cabtype selects the cabinet
+     * (1x12 / 2x12 / 4x12); Presence is fixed at 0.85 (no knob). */
     add("gain",     "Gain",     0.35f);
     add("bass",     "Bass",     0.50f);
     add("mid",      "Mid",      0.50f);
@@ -20,10 +20,9 @@ AmpNeveAudioProcessor::createParameterLayout() {
     add("master",   "Master",   0.55f);
     add("level",    "Level",    0.75f);
     add("neve",     "Neve",     1.00f);
-    add("cab",      "Cab",      0.50f);
-    add("presence", "Presence", 0.85f);
+    layout.add(std::make_unique<juce::AudioParameterFloat>(
+        "cabtype", "Cabtype", juce::NormalisableRange<float>(0.0f, 2.0f, 1.0f), 0.0f));
     add("input", "Input", 1.00f);
-    layout.add(std::make_unique<juce::AudioParameterBool>("voice", "Voice", false));
     layout.add(std::make_unique<juce::AudioParameterBool>("bypass", "Bypass", false));
     return layout;
 }
@@ -55,10 +54,8 @@ void AmpNeveAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     auto* pMaster   = apvts.getRawParameterValue("master");
     auto* pLevel    = apvts.getRawParameterValue("level");
     auto* pNeve     = apvts.getRawParameterValue("neve");
-    auto* pCab      = apvts.getRawParameterValue("cab");
-    auto* pPresence = apvts.getRawParameterValue("presence");
+    auto* pCabtype  = apvts.getRawParameterValue("cabtype");
     auto* pInput    = apvts.getRawParameterValue("input");
-    auto* pVoice    = apvts.getRawParameterValue("voice");
     auto* pBypass   = apvts.getRawParameterValue("bypass");
 
     if (core == nullptr) { buffer.clear(); return; }
@@ -71,10 +68,9 @@ void AmpNeveAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     Ampsim_set_param(core, AMP_PARAM_MASTER, *pMaster);
     Ampsim_set_param(core, AMP_PARAM_LEVEL,  *pLevel);
     Ampsim_set_param(core, AMP_PARAM_NEVE,    *pNeve);
-    Ampsim_set_param(core, AMP_PARAM_CAB,     *pCab);
-    Ampsim_set_param(core, AMP_PARAM_PRESENCE, *pPresence);
+    Ampsim_set_param(core, AMP_PARAM_CABTYPE, *pCabtype);
     Ampsim_set_param(core, AMP_PARAM_INPUT, *pInput);
-    Ampsim_set_param(core, AMP_PARAM_VOICE, *pVoice);
+    Ampsim_set_param(core, AMP_PARAM_PRESENCE, 0.85f);   /* fixed, no knob */
 
     const int numSamples = buffer.getNumSamples();
     if ((int)monoIn.size() < numSamples) monoIn.resize(numSamples);

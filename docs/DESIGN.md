@@ -256,6 +256,24 @@ Measured after: narrowband ripple (300-5 kHz) 1.31 -> 0.77 dB, decay -40 dB
 at 15.9 ms, low end negative, 5.5 kHz +1.1 dB. A/B renders: out/v15_*.wav
 (old) vs out/v16_*.wav (new), same parameters.
 
+## Cab types + knob simplification (v17)
+
+- Cabtype param (0..2): 1x12 / 2x12 / 4x12 synthesized miked-cab kernels.
+  Multi-speaker synthesis: each cone gets its own ring phase and a
+  mic-distance delay (2x12: +0.4 ms; 4x12: 0/0.35/0.7/1.0 ms -> subtle comb
+  in 1-2 kHz); one room stage on the summed cab. Per-cab speaker resonance
+  and voicing chain (2x12/4x12: lower cone modes, more low-mid body).
+- Click-free cab switching: dual 1024-tap delay buffers (both always
+  written) + a ~12 ms crossfade between the old and new kernels; biquad
+  state is preserved on switch (bq_load_keep). State grew to 8784 B.
+- Control surface cut to 9 params (the ZDL ceiling), identical on VST and
+  ZDL: P1 Bass/Mid/Treble, P2 Gain/Master/Level, P3 Neve/Cabtype/Input.
+  Removed: Voice (merged to Nashville character), Cab dark/bright blend
+  (each cab owns its voicing), Presence knob (fixed 0.85). The old
+  dark/bright chains also ran only 5 of their 6 biquads (the second
+  4th-order-LP section was dropped); v17 chains run all 6, so the LP is
+  genuinely 4th-order now.
+
 ## Why these stages (boutique rationale)
 
 | Stage | What it adds | Reference |

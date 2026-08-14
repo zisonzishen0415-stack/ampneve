@@ -29,23 +29,24 @@ public:
 const char* AmpNeveAudioProcessorEditor::ids[3][3] = {
     {"bass", "mid", "treble"},
     {"gain", "master", "level"},
-    {"neve", "cab", "presence"}
+    {"neve", "cabtype", "input"}
 };
 const char* AmpNeveAudioProcessorEditor::names[3][3] = {
     {"Bass", "Mid", "Treble"},
     {"Gain", "Master", "Level"},
-    {"Neve", "Cab", "Presence"}
+    {"Neve", "Cabtype", "Input"}
 };
 
-/* Factory presets: {gain, bass, mid, treble, master, level, neve, cab,
- * presence, input, voice}. The first one mirrors the plugin defaults. */
+/* Factory presets: {gain, bass, mid, treble, master, level, neve,
+ * cabtype, input}. The first one mirrors the plugin defaults. Cabtype:
+ * 1x12 clean platform, 2x12 body for edge/emo, 4x12 for crunch/gain. */
 const AmpNeveAudioProcessorEditor::FactoryPreset
 AmpNeveAudioProcessorEditor::factoryPresets[5] = {
-    { "Nashville Clean", { 0.20f, 0.55f, 0.45f, 0.60f, 0.45f, 0.75f, 1.00f, 0.45f, 0.70f, 1.00f, 0.0f } },
-    { "Edge / Breakup",  { 0.35f, 0.50f, 0.50f, 0.50f, 0.55f, 0.75f, 1.00f, 0.50f, 0.85f, 1.00f, 0.0f } },
-    { "British Crunch",  { 0.55f, 0.50f, 0.40f, 0.60f, 0.65f, 0.70f, 1.00f, 0.55f, 0.80f, 1.00f, 0.0f } },
-    { "High Gain",       { 0.85f, 0.50f, 0.45f, 0.55f, 0.90f, 0.70f, 1.00f, 0.55f, 0.80f, 1.00f, 0.0f } },
-    { "Emo / Edge",      { 0.40f, 0.50f, 0.60f, 0.55f, 0.60f, 0.75f, 1.00f, 0.50f, 0.80f, 1.00f, 1.0f } }
+    { "Nashville Clean", { 0.20f, 0.55f, 0.45f, 0.60f, 0.45f, 0.75f, 1.00f, 0.0f, 1.00f } },
+    { "Edge / Breakup",  { 0.35f, 0.50f, 0.50f, 0.50f, 0.55f, 0.75f, 1.00f, 1.0f, 1.00f } },
+    { "British Crunch",  { 0.55f, 0.50f, 0.40f, 0.60f, 0.65f, 0.70f, 1.00f, 2.0f, 1.00f } },
+    { "High Gain",       { 0.85f, 0.50f, 0.45f, 0.55f, 0.90f, 0.70f, 1.00f, 2.0f, 1.00f } },
+    { "Emo / Edge",      { 0.40f, 0.50f, 0.60f, 0.55f, 0.60f, 0.75f, 1.00f, 1.0f, 1.00f } }
 };
 
 static const juce::Colour lcdBg(0xff0d2239);     /* deep blue LCD backlight */
@@ -69,12 +70,6 @@ AmpNeveAudioProcessorEditor::AmpNeveAudioProcessorEditor(AmpNeveAudioProcessor& 
     bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         processor.apvts, "bypass", bypassButton);
 
-    voiceButton.setButtonText("VOICE");
-    voiceButton.setClickingTogglesState(true);
-    addAndMakeVisible(voiceButton);
-    voiceAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        processor.apvts, "voice", voiceButton);
-
     /* preset row: factory + user presets (XML files in the app-data dir) */
     presetBox.setTextWhenNothingSelected("PRESET");
     presetBox.onChange = [this] {
@@ -93,7 +88,10 @@ AmpNeveAudioProcessorEditor::AmpNeveAudioProcessorEditor(AmpNeveAudioProcessor& 
     for (int i = 0; i < 3; ++i) {
         knobs[i].setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
         knobs[i].setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-        knobs[i].setRange(0.0, 1.0, 0.001);
+        if (strcmp(ids[currentPage][i], "cabtype") == 0)
+            knobs[i].setRange(0.0, 2.0, 1.0);   /* 1x12 / 2x12 / 4x12 */
+        else
+            knobs[i].setRange(0.0, 1.0, 0.001);
         /* classic pedal gauge: min lower-left, mid straight up, max lower-right */
         knobs[i].setRotaryParameters(juce::MathConstants<float>::pi * 0.75f,
                                      juce::MathConstants<float>::pi * 2.25f, true);
@@ -104,17 +102,6 @@ AmpNeveAudioProcessorEditor::AmpNeveAudioProcessorEditor(AmpNeveAudioProcessor& 
         };
         addAndMakeVisible(knobs[i]);
     }
-    /* dedicated Input knob (hardware INPUT VOL), outside the page knobs */
-    inputKnob.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    inputKnob.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    inputKnob.setRange(0.0, 1.0, 0.001);
-    inputKnob.setRotaryParameters(juce::MathConstants<float>::pi * 0.75f,
-                                  juce::MathConstants<float>::pi * 2.25f, true);
-    inputKnob.setScrollWheelEnabled(true);
-    inputKnob.setDoubleClickReturnValue(true, 1.0);   /* INPUT reset */
-    addAndMakeVisible(inputKnob);
-    inputAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-        processor.apvts, "input", inputKnob);
 
     knobLaf = std::make_unique<PedalKnobLookAndFeel>();
     setLookAndFeel(knobLaf.get());
@@ -171,6 +158,11 @@ void AmpNeveAudioProcessorEditor::setPage(int page) {
         bool has = (ids[currentPage][i][0] != '\0');
         knobs[i].setEnabled(has);
         if (has) {
+            /* cabtype is a 3-way switch (0..2); everything else 0..1 */
+            if (strcmp(ids[currentPage][i], "cabtype") == 0)
+                knobs[i].setRange(0.0, 2.0, 1.0);
+            else
+                knobs[i].setRange(0.0, 1.0, 0.001);
             attachments[i] = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
                 processor.apvts, ids[currentPage][i], knobs[i]);
             /* double-click returns the knob to the plugin's default */
@@ -210,17 +202,18 @@ void AmpNeveAudioProcessorEditor::paint(juce::Graphics& g) {
     g.setColour(lcdLit);
     g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 15.0f, juce::Font::bold));
     g.drawText("AMPNEVE", header.removeFromLeft(104), juce::Justification::centredLeft, false);
-    /* build label: proves which IR generation is loaded (v16 = 2026-08-14) */
+    /* build label: proves which generation is loaded (v17 = cab types) */
     g.setColour(lcdDim);
     g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 11.0f, juce::Font::plain));
-    g.drawText("v16 IR", header.removeFromLeft(46), juce::Justification::centredLeft, false);
+    g.drawText("v17", header.removeFromLeft(34), juce::Justification::centredLeft, false);
     g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 13.0f, juce::Font::bold));
     auto pageArea = header.removeFromRight(42);
     g.drawText(juce::String("P") + juce::String(currentPage + 1), pageArea,
                juce::Justification::centredRight, false);
-    auto* pVoice = processor.apvts.getRawParameterValue("voice");
-    bool emo = pVoice != nullptr && pVoice->load() > 0.5f;
-    g.drawText(emo ? "EMO" : "NASHVILLE", header, juce::Justification::centredRight, false);
+    auto* pCab = processor.apvts.getRawParameterValue("cabtype");
+    float cabtype = (pCab != nullptr) ? pCab->load() : 0.0f;
+    g.drawText(cabtype >= 1.5f ? "4X12" : (cabtype >= 0.5f ? "2X12" : "1X12"),
+               header, juce::Justification::centredRight, false);
 
     /* input level meter: label + horizontal bar (raw input peak) + dB text */
     {
@@ -285,7 +278,8 @@ void AmpNeveAudioProcessorEditor::paint(juce::Graphics& g) {
         g.setColour(lcdDim);
         g.fillRect(bar);
         g.setColour(lcdLit);
-        g.fillRect(bar.withWidth((int)(bar.getWidth() * val)));
+        float barFrac = (ids[currentPage][i][0] == 'c') ? val * 0.5f : val;  /* cabtype 0..2 */
+        g.fillRect(bar.withWidth((int)(bar.getWidth() * barFrac)));
         if (i == focusedSlot) {
             g.setColour(lcdLit);
             g.drawRect(slotRect(i), 2);
@@ -296,25 +290,16 @@ void AmpNeveAudioProcessorEditor::paint(juce::Graphics& g) {
         g.drawText(juce::String::formatted("%.2f", val), slot,
                    juce::Justification::centred, false);
     }
-
-    /* INPUT knob caption under the rightmost knob */
-    auto kIn = knobRect(3);
-    g.setColour(lcdDim);
-    g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 11.0f, juce::Font::bold));
-    g.drawText("INPUT", juce::Rectangle<int>(kIn.getX(), kIn.getBottom() + 2, kIn.getWidth(), 14),
-               juce::Justification::centred, false);
 }
 
 void AmpNeveAudioProcessorEditor::resized() {
     auto lcd = lcdRect();
     for (int i = 0; i < 3; ++i)
         knobs[i].setBounds(knobRect(i));
-    inputKnob.setBounds(knobRect(3));
     auto area = getLocalBounds();
     auto btnRow = area.removeFromBottom(34);
     bypassButton.setBounds(16, btnRow.getY(), 84, 24);
     pageButton.setBounds(108, btnRow.getY(), 84, 24);
-    voiceButton.setBounds(200, btnRow.getY(), 84, 24);
     auto presetRow = area.removeFromBottom(30);
     presetBox.setBounds(presetRow.getX() + 16, presetRow.getY() + 2, 220, 24);
     saveButton.setBounds(presetRow.getX() + 248, presetRow.getY() + 2, 66, 24);
@@ -322,12 +307,6 @@ void AmpNeveAudioProcessorEditor::resized() {
 }
 
 void AmpNeveAudioProcessorEditor::timerCallback() {
-    /* VOICE button text mirrors the active voice (Nashville/Emo) */
-    if (auto* pVoice = processor.apvts.getRawParameterValue("voice")) {
-        const char* txt = (pVoice->load() > 0.5f) ? "VOICE EMO" : "VOICE NAS";
-        if (voiceButton.getButtonText() != juce::String(txt))
-            voiceButton.setButtonText(txt);
-    }
     repaint();
 }
 
@@ -336,9 +315,9 @@ juce::File AmpNeveAudioProcessorEditor::presetDir() const {
         .getChildFile("AmpNeve").getChildFile("Presets");
 }
 
-static const char* presetParamIds[11] = {
+static const char* presetParamIds[9] = {
     "gain", "bass", "mid", "treble", "master", "level",
-    "neve", "cab", "presence", "input", "voice"
+    "neve", "cabtype", "input"
 };
 
 void AmpNeveAudioProcessorEditor::refreshPresetList() {
@@ -361,7 +340,7 @@ void AmpNeveAudioProcessorEditor::refreshPresetList() {
 void AmpNeveAudioProcessorEditor::applyFactoryPreset(int index) {
     if (index < 0 || index >= 5) return;
     const FactoryPreset& p = factoryPresets[index];
-    for (int i = 0; i < 11; ++i)
+    for (int i = 0; i < 9; ++i)
         if (auto* param = processor.apvts.getParameter(presetParamIds[i]))
             param->setValueNotifyingHost(p.v[i]);
     if (auto* param = processor.apvts.getParameter("bypass"))

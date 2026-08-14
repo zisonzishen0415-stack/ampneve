@@ -57,12 +57,16 @@ independent means:
 - **Nashville session voice**: tight low end (105 Hz resonance +2.5 dB),
   forward ~850 Hz mid, glassy top (full 4th-order 9.5/12 kHz lowpass) -
   the clean/edge platform studio country and modern shoegaze players use.
-- **11 parameters**: nine knobs (P1 Bass/Mid/Treble, P2 Gain/Master/Level,
-  P3 Neve/Cab/Presence), the dedicated **Input trim** knob and the **Voice**
-  switch, plus a live **input level meter** in the VST LCD (green/yellow/red
-  vs the -12..-6 dBFS DI target). The ZDL fixes Input at 1.0 - the pedal's
-  hardware INPUT VOL does the level matching before the DSP, exactly like
-  plugging into a tube amp.
+- **9 parameters** (VST and ZDL identical, three pages x three): P1
+  Bass/Mid/Treble, P2 Gain/Master/Level, P3 Neve/Cabtype/Input, plus the
+  BYPASS button and a live **input level meter** in the VST LCD
+  (green/yellow/red vs the -12..-6 dBFS DI target). Presence is fixed at
+  0.85, the cab voicing blend is gone (each cab type owns its voicing).
+- **Three cabinets (Cabtype knob)**: 1x12 / 2x12 / 4x12 synthesized
+  miked-cab IRs - multi-speaker summing with per-cone ring phases and
+  mic-distance delays (subtle comb in 1-2 kHz), per-cab speaker resonance,
+  voicing chain and room. Switching is click-free: dual-buffer convolution
+  crossfades over ~12 ms.
 - **Presets (VST)**: a preset row above the pedal buttons - five factory
   presets (Nashville Clean / Edge-Breakup / British Crunch / High Gain /
   Emo-Edge) plus user presets saved as XML files in the OS app-data
@@ -71,15 +75,9 @@ independent means:
   removes it, and the DAW's own plugin-state save (VST3 state) also works -
   sessions restore the last settings either way.
 - **Reasonable defaults**: the factory patch is a balanced edge-of-breakup
-  tone (gain 0.35, master 0.55, level 0.75, presence 0.85) - pick softly
-  for clean, dig in for crunch - so the first note through the plugin
-  already shows the touch-dynamics character.
-- **Two voices (switch)**: Nashville (clean session sheen) and Emo/Edge
-  (earlier breakup, more 400-800 Hz body, warmer top, less Neve sheen).
-  VST = VOICE button + LCD indicator. ZDL fixes Voice to Nashville: the
-  firmware's visible-knob ceiling is 9 (3 pages x 3, reverson ABI.md 3.1),
-  so the switch has no pedal slot; an Emo/Edge variant ZDL is a one-line
-  change in `amp_zdl_init()`.
+  tone (gain 0.35, master 0.55, level 0.75, neve 1.0, cabtype 1x12) - pick
+  softly for clean, dig in for crunch - so the first note through the
+  plugin already shows the touch-dynamics character.
 - **Input trim**: 0..1 maps to 0.125x..1.25x input gain, with 1.0 = the
   calibrated reference (the historical fixed 1.25x). Set it once per take so
   every source hits the amp the same way.
