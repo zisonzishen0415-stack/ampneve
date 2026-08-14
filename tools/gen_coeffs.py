@@ -67,10 +67,27 @@ def butter(fs, fc, order, kind):
         return [section(0.54119610), section(1.30656296)]
     raise ValueError('only order 2/4 supported')
 
+def _lfilter(b, a, x):
+    """Direct-form I filter (a0 normalized to 1)."""
+    a = np.asarray(a, dtype=np.float64)
+    b = np.asarray(b, dtype=np.float64)
+    y = np.zeros(len(x))
+    for i in range(len(x)):
+        acc = b[0] * x[i]
+        for k in range(1, len(b)):
+            if i >= k:
+                acc += b[k] * x[i - k]
+        for k in range(1, len(a)):
+            if i >= k:
+                acc -= a[k] * y[i - k]
+        y[i] = acc
+    return y
+
 def load_real_ir(wav_name):
-    """Load a 44.1 kHz mono 16-bit IR, truncate to CAB_IR_N, end-window,
-    and loudness-match the mid band (300..3000 Hz) to unity gain so the
-    amp's level staging is unchanged from the synthesized kernels."""
+    """Load a 44.1 kHz mono 16/24/32-bit IR, truncate to CAB_IR_N,
+    end-window, and loudness-match the mid band (300..3000 Hz) to unity
+    gain so the amp's level staging is unchanged from the synthesized
+    kernels."""
     p = os.path.join(IRDIR, wav_name)
     if not os.path.exists(p):
         sys.exit(f'[gen_coeffs] missing IR file: {p}')
@@ -79,13 +96,36 @@ def load_real_ir(wav_name):
         sys.exit(f'[gen_coeffs] {wav_name}: expected 44100 Hz, got {w.getframerate()}')
     if w.getnchannels() != 1:
         sys.exit(f'[gen_coeffs] {wav_name}: expected mono')
-    d = w.readframes(w.getnframes())
+    sw = w.getsampwidth()
+    n = w.getnframes()
+    d = w.readframes(n)
     w.close()
-    vals = struct.unpack('<%dh' % (len(d) // 2), d[:len(d) // 2 * 2])
-    x = np.array(vals, dtype=np.float64) / 32768.0
+    if sw == 2:
+        vals = struct.unpack('<%dh' % n, d[:n * 2])
+        x = np.array(vals, dtype=np.float64) / 32768.0
+    elif sw == 3:
+        # 24-bit little-endian: sign-extend the top bit
+        x = np.zeros(n, dtype=np.float64)
+        for i in range(n):
+            b = d[i * 3:i * 3 + 3]
+            v = b[0] | (b[1] << 8) | (b[2] << 16)
+            if v & 0x800000:
+                v -= 0x1000000
+            x[i] = v / 8388608.0
+    elif sw == 4:
+        vals = struct.unpack('<%df' % n, d[:n * 4])
+        x = np.array(vals, dtype=np.float64)
+    else:
+        sys.exit(f'[gen_coeffs] {wav_name}: unsupported bit depth {sw * 8}')
     if len(x) < CAB_IR_N:
         sys.exit(f'[gen_coeffs] {wav_name}: too short ({len(x)} < {CAB_IR_N})')
     x = x[:CAB_IR_N].copy()
+    # kernel hygiene: HP ~30 Hz on the kernel itself - removes any DC
+    # pedestal / subsonic capture noise (a DC component in the kernel is a
+    # step-response thump on every note). The safety chain in the core
+    # cannot do this (it runs before the convolution).
+    hpb = butter(FS, 30.0, 2, 'highpass')[0]
+    x = _lfilter(np.array([hpb[0], hpb[1], hpb[2]]), np.array([1.0, hpb[3], hpb[4]]), x)
     # end window: no truncation click (8 ms squared fade)
     nw = min(int(0.008 * FS), CAB_IR_N // 4)
     wnd = np.ones(CAB_IR_N)
