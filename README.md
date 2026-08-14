@@ -224,6 +224,31 @@ cmake --install build
 # -> "C:\Program Files\Common Files\VST3\AmpNeve.vst3"
 ```
 
+### VST rebuild lessons (2026-08-14)
+
+Two hard-won facts from a crash-hunting session:
+
+1. **Never mix objects from different builds when hand-linking.** Hand-linking
+   with JUCE objects from an older build plus freshly compiled ones produced a
+   DLL that loaded but crashed REAPER at instantiation (AV in
+   `juce::TextEditor::mouseDoubleClick`, heap-corruption signature). The
+   crash disappeared after recompiling **every** object from source. When
+   bypassing CMake/ninja (they can hang in sandboxed environments that block
+   child-process IPC), always do a full clean rebuild: core + PluginProcessor
+   + PluginEditor + all JUCE module objects + the 8 VST3 client objects +
+   the .res, then relink. The scratch scripts used for this are
+   `build/_full_rebuild.ps1` and `build/_relink.ps1` (in the ignored `build/`
+   dir - extract what you need from `build_ninja/build.ninja`).
+2. **REAPER caches VST3 module metadata by DLL hash.** Replacing a plugin DLL
+   under a stale `reaper-vstplugins64.ini` entry can crash REAPER on
+   instantiation. After installing a new build, clear the cache or re-scan
+   (`Options -> Preferences -> Plug-ins -> VST`).
+
+Verify a fresh build before installing: `build/test_ampsim_cur.exe` (36
+tests), then check the DLL actually contains the v16 IR kernel bytes and the
+`v16 IR` UI label (the label is drawn in the LCD header - if you see it, the
+loaded plugin is current).
+
 - `test_ampsim` - numeric behavior + stability
 - `tools/check_zdl_safe.py` - static ZDL-safety audit of the core
 - `tools/di_level_check.py` - level-check a recorded DI take (peak/rms/clipping):

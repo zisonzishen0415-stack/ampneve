@@ -209,7 +209,11 @@ void AmpNeveAudioProcessorEditor::paint(juce::Graphics& g) {
     auto header = screen.removeFromTop(30);
     g.setColour(lcdLit);
     g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 15.0f, juce::Font::bold));
-    g.drawText("AMPNEVE", header.removeFromLeft(180), juce::Justification::centredLeft, false);
+    g.drawText("AMPNEVE", header.removeFromLeft(104), juce::Justification::centredLeft, false);
+    /* build label: proves which IR generation is loaded (v16 = 2026-08-14) */
+    g.setColour(lcdDim);
+    g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 11.0f, juce::Font::plain));
+    g.drawText("v16 IR", header.removeFromLeft(46), juce::Justification::centredLeft, false);
     g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 13.0f, juce::Font::bold));
     auto pageArea = header.removeFromRight(42);
     g.drawText(juce::String("P") + juce::String(currentPage + 1), pageArea,
