@@ -196,6 +196,31 @@ Known honest trade-off: at extreme gain+master+level the power stage
 saturates fully and the output can approach 0 dBFS - set the Level knob
 for the interface, like a real amp into a real desk.
 
+## Design provenance (where the amp comes from)
+
+Every stage models a documented real-amp mechanism; the public sources
+below are what the design follows, and docs/DESIGN.md records the
+measured iteration history (harmonic tables, compression ratios) behind
+each version - the parameters are tuned by measurement, not guessed.
+
+| Stage | Real-amp reference | Source |
+|---|---|---|
+| V1 input stage (fixed ~4x + light asymmetric bloom) | first 12AX7 stage; "bloom before gain" | Dumble ODS input topology |
+| Miller-cap interstage LPs (9 kHz after V1, 5 kHz after V2) | grid-plate Miller capacitance pole (a typical 12AX7 + 68k source clips around 15.5 kHz); high-gain interstage RC networks that "short the highs and lows to ground" so each stage's harmonics are shaped before the next multiplies them | AikenAmps, *What is Miller Capacitance*; Soldano SLO service notes |
+| V2 cold clipper (Gain knob) | 10k cold-cathode biased stage: positive half conducts and clips early, negative half is attenuated - the "spitty" Marshall crunch | JCM800 preamp |
+| Touch-dynamics envelope | soft picks stay clean, hard picks break up | Two Rock / Dumble behavior |
+| Tone network (140/850/5k, FMV position) | passive Fender/Marshall tone stack: after the preamp, before the power amp | Fender/Marshall |
+| Phase inverter + push-pull power stage (odd-symmetric, NFB-shaped knee) + sag | LTP inverter (asymmetric); push-pull cancels even harmonics; the NFB loop surrounds PI + power tubes + output transformer; rectifier sag dips the supply on transients | Marshall power amp |
+| Klon-style clean/dirty mix | V1 clean tap (a clean AMP tone, not the raw DI) blended with the V2 driven path, both through the same tone stack + power amp | Klon Centaur |
+| Neve stage (knob) | 1970s Neve 1073 console channel - the sheen on "recorded" guitar: transformer even-harmonic saturation + 1073 EQ (110 Hz shelf, 700 Hz mid, 12 kHz shelf), wet/dry blended | Neve 1073 |
+| Cabinet | v16-v17 synthesized miked-cab kernels (see docs/DESIGN.md) -> v18 real sampled IRs (Tubes&Tone, 2x12 G12H30+Blue / 4x12 Greenback family) | see docs/DESIGN.md |
+
+Why the Neve stage sits BEFORE the cab: its saturation harmonics are tamed
+by the speaker rolloff - A/B'd against post-cab placement, which sounds
+harsh. And why the real-IR front chain is nearly transparent: the sampled
+capture already owns the mic/cab/room EQ, so the core only adds safety
+filters (HP 40 Hz / LP 16 kHz) and never re-colors a real capture.
+
 ## Build
 
 Builds on this machine use the MSYS2 ucrt64 toolchain (gcc/g++ 13+, cmake,
