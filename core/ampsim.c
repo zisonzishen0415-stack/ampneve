@@ -1,4 +1,6 @@
 /* core/ampsim.c - AmpNeve boutique amp core (see ampsim.h). */
+#include <stddef.h>   /* NULL - self-contained even when inlined (ZDL build) */
+
 #include "ampsim.h"
 #include "ampsim_coeffs.h"
 
@@ -262,84 +264,73 @@ void Ampsim_set_param(Ampsim* a, AmpsimParam p, float v) {
     if (v < 0.0f) v = 0.0f;
     if (v > 1.0f) v = 1.0f;
     AmpsimState* s = &a->s;
-    switch (p) {
-        case AMP_PARAM_INPUT:
-            s->input = v;
-            s->in_g = Ampsim_input_gain(v);
-            break;
-        case AMP_PARAM_GAIN:
-            s->gain = v;
-            s->v2_drive = s->gain_base + 1.5f * v + 16.0f * v * v;
-            s->dry_mix = 0.40f - 0.17f * v;
-            break;
-        case AMP_PARAM_VOICE:
-        {
-            float nv = (v >= 0.5f) ? 1.0f : 0.0f;
-            if (nv != s->voice) {
-                s->voice = nv;
-                s->gain_base = (nv >= 0.5f) ? 0.35f : 0.2f;
-                s->v2_drive = s->gain_base + 1.5f * s->gain + 16.0f * s->gain * s->gain;
-                s->dry_mix = 0.40f - 0.17f * s->gain;
-                update_voice_coeffs(a);
-            }
-            break;
+    /* if-else chain, NOT switch: cl6x lowers a switch to a $C$SW jump
+     * table in a .switch: section, and the reverson ZDL linker does not
+     * place that section - the table relocations are skipped and knob
+     * turns would jump into garbage on the pedal. */
+    if (p == AMP_PARAM_INPUT) {
+        s->input = v;
+        s->in_g = Ampsim_input_gain(v);
+    } else if (p == AMP_PARAM_GAIN) {
+        s->gain = v;
+        s->v2_drive = s->gain_base + 1.5f * v + 16.0f * v * v;
+        s->dry_mix = 0.40f - 0.17f * v;
+    } else if (p == AMP_PARAM_VOICE) {
+        float nv = (v >= 0.5f) ? 1.0f : 0.0f;
+        if (nv != s->voice) {
+            s->voice = nv;
+            s->gain_base = (nv >= 0.5f) ? 0.35f : 0.2f;
+            s->v2_drive = s->gain_base + 1.5f * s->gain + 16.0f * s->gain * s->gain;
+            s->dry_mix = 0.40f - 0.17f * s->gain;
+            update_voice_coeffs(a);
         }
-        case AMP_PARAM_BASS:
-            if (v != s->bass) {
-                s->bass = v;
-                tone_peaking(&s->tone_bass, AMP_TONE_BASS_COSW, AMP_TONE_BASS_ALPHA, 0.5f + v);
-            }
-            break;
-        case AMP_PARAM_MID:
-            if (v != s->mid) {
-                s->mid = v;
-                tone_peaking(&s->tone_mid, AMP_TONE_MID_COSW, AMP_TONE_MID_ALPHA, 0.5f + v);
-            }
-            break;
-        case AMP_PARAM_TREBLE:
-            if (v != s->treble) {
-                s->treble = v;
-                tone_peaking(&s->tone_treble, AMP_TONE_TREB_COSW, AMP_TONE_TREB_ALPHA, 0.5f + v);
-            }
-            break;
-        case AMP_PARAM_MASTER:
-            s->master = v;
-            s->pi_drive = 0.35f + 0.65f * v;
-            s->pp_drive = 0.30f + 0.75f * v;
-            s->sag_amt = 0.24f * v;
-            break;
-        case AMP_PARAM_LEVEL:
-            s->level = v;
-            s->level_gain = 0.20f + 0.70f * v;
-            break;
-        case AMP_PARAM_NEVE:
-            s->neve = v;
-            break;
-        case AMP_PARAM_CAB:
-            s->cab_tone = v;
-            break;
-        case AMP_PARAM_PRESENCE:
-            s->presence = v;
-            break;
+    } else if (p == AMP_PARAM_BASS) {
+        if (v != s->bass) {
+            s->bass = v;
+            tone_peaking(&s->tone_bass, AMP_TONE_BASS_COSW, AMP_TONE_BASS_ALPHA, 0.5f + v);
+        }
+    } else if (p == AMP_PARAM_MID) {
+        if (v != s->mid) {
+            s->mid = v;
+            tone_peaking(&s->tone_mid, AMP_TONE_MID_COSW, AMP_TONE_MID_ALPHA, 0.5f + v);
+        }
+    } else if (p == AMP_PARAM_TREBLE) {
+        if (v != s->treble) {
+            s->treble = v;
+            tone_peaking(&s->tone_treble, AMP_TONE_TREB_COSW, AMP_TONE_TREB_ALPHA, 0.5f + v);
+        }
+    } else if (p == AMP_PARAM_MASTER) {
+        s->master = v;
+        s->pi_drive = 0.35f + 0.65f * v;
+        s->pp_drive = 0.30f + 0.75f * v;
+        s->sag_amt = 0.24f * v;
+    } else if (p == AMP_PARAM_LEVEL) {
+        s->level = v;
+        s->level_gain = 0.20f + 0.70f * v;
+    } else if (p == AMP_PARAM_NEVE) {
+        s->neve = v;
+    } else if (p == AMP_PARAM_CAB) {
+        s->cab_tone = v;
+    } else if (p == AMP_PARAM_PRESENCE) {
+        s->presence = v;
     }
 }
 
 float Ampsim_get_param(const Ampsim* a, AmpsimParam p) {
     if (!a) return 0.0f;
     const AmpsimState* s = &a->s;
-    switch (p) {
-        case AMP_PARAM_INPUT:  return s->input;
-        case AMP_PARAM_GAIN:   return s->gain;
-        case AMP_PARAM_BASS:   return s->bass;
-        case AMP_PARAM_MID:    return s->mid;
-        case AMP_PARAM_TREBLE: return s->treble;
-        case AMP_PARAM_MASTER: return s->master;
-        case AMP_PARAM_LEVEL:  return s->level;
-        case AMP_PARAM_NEVE:    return s->neve;
-        case AMP_PARAM_CAB:     return s->cab_tone;
-        case AMP_PARAM_PRESENCE: return s->presence;
-        case AMP_PARAM_VOICE:   return s->voice;
-    }
+    /* if-else chain: same $C$SW jump-table rule as Ampsim_set_param. */
+    if (p == AMP_PARAM_INPUT)          return s->input;
+    else if (p == AMP_PARAM_GAIN)      return s->gain;
+    else if (p == AMP_PARAM_BASS)      return s->bass;
+    else if (p == AMP_PARAM_MID)       return s->mid;
+    else if (p == AMP_PARAM_TREBLE)    return s->treble;
+    else if (p == AMP_PARAM_MASTER)    return s->master;
+    else if (p == AMP_PARAM_LEVEL)     return s->level;
+    else if (p == AMP_PARAM_NEVE)      return s->neve;
+    else if (p == AMP_PARAM_CAB)       return s->cab_tone;
+    else if (p == AMP_PARAM_PRESENCE)  return s->presence;
+    else if (p == AMP_PARAM_VOICE)     return s->voice;
     return 0.0f;
 }
 

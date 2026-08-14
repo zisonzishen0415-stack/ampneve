@@ -8,9 +8,13 @@
  *   - block processing: 8 samples L + 8 samples R, channel-interleaved
  *   - ctx[11]/ctx[12] magic shuttle preserved
  *
- * Nine knobs across three LineSel pages plus a Voice switch (mirrors the
- * VST): P1: Bass / Mid / Treble,  P2: Gain / Master / Level,
- * P3: Neve / Cab / Presence,  Voice: Nashville / Emo-Edge switch.
+ * Nine knobs across three LineSel pages (mirrors the VST):
+ * P1: Bass / Mid / Treble,  P2: Gain / Master / Level,  P3: Neve / Cab / Presence.
+ *
+ * Voice is FIXED to Nashville (0) on the pedal: the firmware's visible-knob
+ * ceiling is 9 (3 pages x 3, see the reverson ABI.md 3.1), so the VST's
+ * Voice switch has no ZDL slot. An Emo/Edge variant ZDL can be built by
+ * setting AMP_PARAM_VOICE to 1.0f in amp_zdl_init below.
  *
  * Input trim is fixed at 1.0 (the calibrated reference) and takes no knob:
  * the pedal's hardware INPUT VOL sits before the DSP and does the level
@@ -99,6 +103,10 @@ static inline void amp_zdl_init(AmpZdlState *st)
      * INPUT VOL handles level matching before the DSP. */
     Ampsim_set_param((Ampsim *)&st->memL, AMP_PARAM_INPUT, 1.0f);
     Ampsim_set_param((Ampsim *)&st->memR, AMP_PARAM_INPUT, 1.0f);
+    /* Voice fixed to Nashville (0): the 9-knob firmware ceiling leaves no
+     * room for the switch. Set to 1.0f to build an Emo/Edge variant ZDL. */
+    Ampsim_set_param((Ampsim *)&st->memL, AMP_PARAM_VOICE, 0.0f);
+    Ampsim_set_param((Ampsim *)&st->memR, AMP_PARAM_VOICE, 0.0f);
     st->magic = AMP_MAGIC;
     st->version = AMP_VERSION;
     st->initialized = 1u;
@@ -146,7 +154,6 @@ void AMP_DRV_AUDIO_FUNC(unsigned int *ctx)
     float neve     = amp_param_norm(params[AMPNEVE_NEVE_SLOT],     AMPNEVE_NEVE_DEFAULT_NORM);
     float cab      = amp_param_norm(params[AMPNEVE_CAB_SLOT],      AMPNEVE_CAB_DEFAULT_NORM);
     float presence = amp_param_norm(params[AMPNEVE_PRESENCE_SLOT], AMPNEVE_PRESENCE_DEFAULT_NORM);
-    float voice    = amp_param_norm(params[AMPNEVE_VOICE_SLOT],    AMPNEVE_VOICE_DEFAULT_NORM);
 
     Ampsim *aL = (Ampsim *)&st->memL;
     Ampsim *aR = (Ampsim *)&st->memR;
@@ -168,8 +175,6 @@ void AMP_DRV_AUDIO_FUNC(unsigned int *ctx)
     Ampsim_set_param(aR, AMP_PARAM_NEVE,     neve);
     Ampsim_set_param(aR, AMP_PARAM_CAB,      cab);
     Ampsim_set_param(aR, AMP_PARAM_PRESENCE, presence);
-    Ampsim_set_param(aL, AMP_PARAM_VOICE, voice);
-    Ampsim_set_param(aR, AMP_PARAM_VOICE, voice);
 
     int i;
     for (i = 0; i < 8; i++) {

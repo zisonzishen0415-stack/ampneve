@@ -76,8 +76,10 @@ independent means:
   already shows the touch-dynamics character.
 - **Two voices (switch)**: Nashville (clean session sheen) and Emo/Edge
   (earlier breakup, more 400-800 Hz body, warmer top, less Neve sheen).
-  VST = VOICE button + LCD indicator; ZDL = a switch param (footswitch CTRL
-  assignment is host-side and hardware-unverified).
+  VST = VOICE button + LCD indicator. ZDL fixes Voice to Nashville: the
+  firmware's visible-knob ceiling is 9 (3 pages x 3, reverson ABI.md 3.1),
+  so the switch has no pedal slot; an Emo/Edge variant ZDL is a one-line
+  change in `amp_zdl_init()`.
 - **Input trim**: 0..1 maps to 0.125x..1.25x input gain, with 1.0 = the
   calibrated reference (the historical fixed 1.25x). Set it once per take so
   every source hits the amp the same way.
