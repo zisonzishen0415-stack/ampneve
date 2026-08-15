@@ -86,6 +86,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                         help="link with audio_nop (pass-through); output to dist_smoke/")
     parser.add_argument("--no-inspect", action="store_true",
                         help="skip the post-compile .obj safety audit")
+    parser.add_argument("--meter", action="store_true",
+                        help="enable the TSCL cycle-counter probe: the Input "
+                             "knob display shows measured cycles per 8-sample "
+                             "block / 60000 (hardware verification build)")
     return parser.parse_args(argv[1:])
 
 
@@ -101,6 +105,11 @@ def main(argv: list[str]) -> int:
             f"[ampneve] TI C6000 compiler not found at {CL6X}\n"
             "  Install TI CGT C6000 8.5.x LTS (free TI-account download) and set\n"
             "  AMPNEVE_TI_ROOT (see zdl/README.md).")
+
+    flags = list(CFLAGS)
+    if args.meter:
+        flags.append("-DAMPNEVE_CYCLE_METER")
+        print("[ampneve] *** CYCLE METER build: Input knob shows cycles/8samples / 60000 ***")
 
     smoke = args.smoke
     audio_nop = bool(manifest.get("audio_nop", False)) or smoke
@@ -118,7 +127,7 @@ def main(argv: list[str]) -> int:
     out_zdl = out_dir / f"{name}.ZDL"
 
     print(f"[ampneve] compiling {src_c.name} -> {obj.name}")
-    subprocess.run([str(CL6X), *CFLAGS, "-c", str(src_c), f"--output_file={obj}"],
+    subprocess.run([str(CL6X), *flags, "-c", str(src_c), f"--output_file={obj}"],
                    check=True, cwd=HERE)
 
     if not args.no_inspect:

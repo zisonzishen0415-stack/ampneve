@@ -38,6 +38,19 @@ AMP_CODE_SECTION(AMP_DRV_AUDIO_FUNC)
 
 #define ZDL_PTR(type, word) ((type)(uintptr_t)(word))
 
+/* C674x cycle-counter probe (build with --meter): measures real cycles per
+ * 8-sample block on the actual pedal and exposes the smoothed value on the
+ * Input knob display (value = cycles/8samples / 60000, so ~0.9..1.0 means
+ * the full-algorithm build is running near the assumed budget). The Input
+ * knob is repurposed in this diagnostic build (DSP input fixed at 1.0);
+ * the host may clobber the display write each block - hardware-verifiable.
+ * TSCL/TSCH via __cregister: pure MVC instructions, no helpers. */
+#if defined(AMPNEVE_CYCLE_METER) && defined(__TI_COMPILER_VERSION__)
+extern __cregister volatile unsigned int TSCL;
+extern __cregister volatile unsigned int TSCH;
+#define AMP_METER_SCALE 60000.0f
+#endif
+
 #define AMP_MAGIC   0x414D504Eu   /* 'AMPN' */
 #define AMP_VERSION 1u
 #define AMP_RAW_MAX 0.14f
@@ -53,6 +66,11 @@ typedef struct AmpZdlState {
     uint32_t version;
     uint32_t initialized;
     uint32_t reserved;
+#if defined(AMPNEVE_CYCLE_METER) && defined(__TI_COMPILER_VERSION__)
+    uint32_t meter_acc;      /* accumulated block cycles */
+    uint32_t meter_cnt;      /* blocks counted */
+    uint32_t meter_max;      /* peak block cycles */
+#endif
     float memL[AMP_STATE_FLOATS];
     float memR[AMP_STATE_FLOATS];
 } AmpZdlState;
@@ -150,6 +168,10 @@ void AMP_DRV_AUDIO_FUNC(unsigned int *ctx)
         cabtype = raw;
     }
     float input    = amp_param_norm(params[AMPNEVE_INPUT_SLOT],    AMPNEVE_INPUT_DEFAULT_NORM);
+#if defined(AMPNEVE_CYCLE_METER) && defined(__TI_COMPILER_VERSION__)
+    input = 1.0f;   /* meter build: Input knob is the display, DSP input fixed */
+    uint32_t t0 = TSCL;
+#endif
 
     Ampsim *aL = (Ampsim *)&st->memL;
     Ampsim *aR = (Ampsim *)&st->memR;
@@ -180,4 +202,24 @@ void AMP_DRV_AUDIO_FUNC(unsigned int *ctx)
         fxBuf[i]     = oL;
         fxBuf[i + 8] = oR;
     }
+
+#if defined(AMPNEVE_CYCLE_METER) && defined(__TI_COMPILER_VERSION__)
+    {
+        uint32_t t1 = TSCL;
+        uint32_t dt = t1 - t0;          /* 32-bit wrap is fine */
+        st->meter_acc += dt;
+        st->meter_cnt += 1u;
+        if (dt > st->meter_max) st->meter_max = dt;
+        if ((st->meter_cnt & 63u) == 0u) {
+            /* expose smoothed cycles per 8-sample block on the Input knob:
+             * display = cycles/8samples / AMP_METER_SCALE */
+            float val = (float)st->meter_acc /
+                        ((float)st->meter_cnt * AMP_METER_SCALE);
+            if (val > 1.0f) val = 1.0f;
+            params[AMPNEVE_INPUT_SLOT] = val;
+            st->meter_acc = 0u;
+            st->meter_cnt = 0u;
+        }
+    }
+#endif
 }
