@@ -13,9 +13,12 @@
 # generated files
 /zdl/ampsim_zdl_params.h
 
-# demo assets / renders (regenerate)
+# demo assets / renders (regenerate); out/gaincmp/ is tracked (measurement
+# suite output of tools/compare_gain.py)
 /assets/
-/out/
+/out/*
+!/out/gaincmp/
+/out/gaincmp/tmp/
 
 # python
 __pycache__/

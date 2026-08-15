@@ -370,3 +370,37 @@ slightly tamed presence so the first note is never harsh.
 - v2 (future): Voice 1..5 voicing presets (Clean American / British
   crunch / Dumble-ish / High-gain / Boutique clean), dual-mic cabinet
   (dynamic close + condenser room), presence/depth.
+
+## v18b: gain-naturalness measurements (vs known-good gain ZDLs)
+
+Measured with `tools/compare_gain.py` (native core render = same DSP code as
+VST/ZDL; all artifacts in `out/gaincmp/`, `SUMMARY.txt` + `report.json`).
+References: stock **BASSDRV** from the real firmware (C674x disassembly:
+IIR + table soft-clip curve, no long FIR, no cab model) and **PurestDrive**
+(exact algorithm port; community gain ZDL).
+
+Result: no digital artifacts measurable.
+
+- **Aliasing: none.** Folded products at -240 dB (noise floor) for 1k/4k/12k
+  sines at max gain; DI guitar 19-22 kHz floor -104.8 dB. Every clip stage
+  is followed by a lowpass (V1 9k, V2 5k, real cab IR rolloff), so there is
+  no alias "fizz". PurestDrive measures -83 dB by comparison (no filtering).
+- **DC: none.** Render means ~ -8e-7; impulse tail decays to -40 dB in
+  16.7 ms - no low-frequency thump (DC blocks at 35 Hz + IR HP30).
+- **Harmonics:** low gain h2 ~ h3 (-23/-21 dB, asymmetric tube character);
+  max gain h3 dominant (-11 dB) with h2 down to -27 dB (push-pull odd-order
+  character). 5th order and up roll off fast (5f1 -34.6 dB). IMD: 2nd order
+  -5.6 dB, 5th order -34.6 dB - warm, no dense high-frequency IM clusters.
+- **Compression:** g=1.0 1k sine: -40 -> -21, -24 -> -11, -12 -> -10.3,
+  -3 -> -9.8 dBFS - smooth approach to a hard limit, like a loud tube power
+  amp, no knee artifacts.
+- **Response:** +7 dB low-mid body (200-700 Hz, real 2x12 behavior);
+  -20 dB below 34 Hz; dark above 5k (-19 dB @ 5.8k) - the approved cab tone.
+- **Tone knobs:** effective span 16-18 dB with pre-power-amp drive
+  interaction (tone boost pushes the power stage into its soft-clip knee),
+  consistent with real FMV stack behavior.
+- **Knob zipper (only finding):** the ZDL reads params[] and updates
+  coefficients every 8-sample block with no smoothing, so fast Gain/Level
+  turns on the pedal can click (VST is smooth via JUCE ramping). Fix if
+  heard on hardware: one-pole smoothing of v2_drive/level_gain in the audio
+  loop (~4 instr, algorithm untouched).
