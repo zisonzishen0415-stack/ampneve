@@ -90,6 +90,12 @@ static float bq_run(Bq* b, float x) {
     b->v1 = v;
     return y;
 }
+#ifdef __TI_COMPILER_VERSION__
+/* ~20 biquads per sample: force inlining so the C6000 build has no per-
+ * biquad CALLP overhead (~30 cycles each). Implementation-only; the math
+ * is unchanged. */
+#pragma FUNC_ALWAYS_INLINE(bq_run)
+#endif
 
 /* Fixed-point reciprocal approximation (3 Newton steps). Used only at
  * set_param time to build tone-network coefficients - the audio path has
@@ -457,6 +463,9 @@ void Ampsim_process(Ampsim* a, float in, float* out) {
         float acc = 0.0f;
         s->ir_delay_a[idx] = x;
         s->ir_delay_b[idx] = x;
+#ifdef __TI_COMPILER_VERSION__
+#pragma MUST_ITERATE(AMP_CAB_IR_N, AMP_CAB_IR_N, 2)
+#endif
         for (i = 0; i < AMP_CAB_IR_N; ++i) {
             acc += s->ir_delay_a[idx] * s->ir[i];
             idx = (idx == 0) ? (AMP_CAB_IR_N - 1) : (idx - 1);
@@ -466,6 +475,9 @@ void Ampsim_process(Ampsim* a, float in, float* out) {
             /* crossfading: also convolve the outgoing kernel, blend */
             int idx2 = s->ir_idx;
             float acc2 = 0.0f;
+#ifdef __TI_COMPILER_VERSION__
+#pragma MUST_ITERATE(AMP_CAB_IR_N, AMP_CAB_IR_N, 2)
+#endif
             for (i = 0; i < AMP_CAB_IR_N; ++i) {
                 acc2 += s->ir_delay_b[idx2] * s->ir_prev[i];
                 idx2 = (idx2 == 0) ? (AMP_CAB_IR_N - 1) : (idx2 - 1);
