@@ -2,7 +2,7 @@
 
 A from-scratch, pedal-safe guitar amp simulator, built as an **independent
 effect** (separate from the Reverson reverse reverb). It turns a DI /
-preamp guitar take into a "through a clean amp + 1x12 cab + Neve console"
+preamp guitar take into a "through a clean amp + 2x12/4x12 cab + Neve console"
 sound, and ships as a **VST3** plus a **Zoom G1on / MS-series ZDL**.
 
 Original DSP - no extracted factory algorithms (boutique amp v15, strict
@@ -78,7 +78,7 @@ independent means:
   removes it, and the DAW's own plugin-state save (VST3 state) also works -
   sessions restore the last settings either way.
 - **Reasonable defaults**: the factory patch is a balanced edge-of-breakup
-  tone (gain 0.35, master 0.55, level 0.75, neve 1.0, cabtype 1x12) - pick
+  tone (gain 0.35, master 0.55, level 0.75, neve 1.0, cabtype 2x12) - pick
   softly for clean, dig in for crunch - so the first note through the
   plugin already shows the touch-dynamics character.
 - **Input trim**: 0..1 maps to 0.125x..1.25x input gain, with 1.0 = the

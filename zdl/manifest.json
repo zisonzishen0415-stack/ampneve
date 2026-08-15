@@ -79,11 +79,11 @@
       "name": "Neve",
       "type": "knob",
       "max": 100,
-      "default": 85,
+      "default": 100,
       "scale": "linear",
       "audio_min": 0.0,
       "audio_max": 1.0,
-      "audio_default": 0.85,
+      "audio_default": 1.0,
       "comment": "Neve coloration amount: transformer even harmonics + 1073 EQ wet/dry (0 = bypass)."
     },
     {

@@ -10,7 +10,7 @@
  *
  * Nine knobs across three LineSel pages (mirrors the VST):
  * P1: Bass / Mid / Treble,  P2: Gain / Master / Level,
- * P3: Neve / Cabtype (1x12/2x12/4x12) / Input.
+ * P3: Neve / Cabtype (2x12/4x12) / Input.
  * Presence is fixed at 0.85 (no knob); single Nashville voice.
  *
  * Build (needs TI C6000 CGT, see zdl/README.md):

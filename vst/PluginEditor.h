@@ -7,7 +7,7 @@ class AmpNeveAudioProcessor;
 /* Pedal-style editor (G1on / MS-series look): three pages x three knobs
  * (P1 Bass/Mid/Treble, P2 Gain/Master/Level, P3 Neve/Cabtype/Input) plus a
  * live input level meter in the LCD. Cabtype cycles the cabinet
- * (1x12 / 2x12 / 4x12). A preset row (factory + user presets) lives above
+ * (2x12 / 4x12). A preset row (factory + user presets) lives above
  * the pedal buttons: user presets persist as XML files in the OS app-data
  * dir, so settings survive DAW sessions even if the host does not restore
  * plugin state. */

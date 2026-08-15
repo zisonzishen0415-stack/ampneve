@@ -1,6 +1,5 @@
 # build outputs
 /build*/
-/dist/
 /dist_smoke/
 *.obj
 *.o

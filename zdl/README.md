@@ -1,16 +1,17 @@
 # AmpNeve ZDL (Zoom MultiStomp)
 
 Custom AMP-category effect for the Zoom G1on / MS-series (ZDL). Original
-boutique-amp DSP, strict real-amp structure (v17): V1 (fixed ~4x gain, soft
+boutique-amp DSP, strict real-amp structure (v18): V1 (fixed ~4x gain, soft
 asymmetric clip, Miller LP @ 9 kHz) -> V2 cold clipper (Gain knob + touch
 dynamics, asymmetric clip, Miller LP @ 5 kHz) -> Klon-style clean/dirty mix
 (V1 clean tap + V2 driven path, both through the tone stack and power amp)
 -> tone network -> phase inverter + push-pull power amp with sag -> Neve
 transformer + 1073-style EQ -> speaker resonance + cabinet voicing +
-1024-tap cabinet IR convolution (miked-cab kernel, per cab type) -> level.
+2048-tap real cabinet IR convolution (Tubes&Tone captures, per cab type) ->
+level.
 Nine knobs across the LineSel pages, mirroring the VST. Presence is fixed
-at 0.85; Cabtype selects the cabinet (1x12 / 2x12 / 4x12 multi-speaker
-synthesized IRs, crossfaded on switch):
+at 0.85; Cabtype selects the cabinet (2x12 open-back G12H30+Blue / 4x12
+Greenback family, crossfaded on switch):
 
 | Page | Knob | Param | Range | Maps to |
 |---|---|---|---|---|
@@ -31,7 +32,7 @@ inside the saved patch, and the DSP reads `params[]` from the host every
 block. Saving the patch on the pedal is exactly "remembering the last
 state" - power off/on and reloading the patch restores the knobs. Factory
 defaults (used only when a patch's param slot is invalid) match the VST:
-gain 0.35, master 0.55, level 0.75, presence 0.85.
+gain 0.35, master 0.55, level 0.75, neve 1.0, presence 0.85.
 
 ## Hardware / build status
 

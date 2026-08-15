@@ -12,7 +12,7 @@ AmpNeveAudioProcessor::createParameterLayout() {
     /* 9 knobs, three pages x 3 (tone / amp / voicing), pedal style. The
      * defaults are a balanced edge-of-breakup patch: touch dynamics on the
      * pick, warm power stage, Neve color on. Cabtype selects the cabinet
-     * (1x12 / 2x12 / 4x12); Presence is fixed at 0.85 (no knob). */
+     * (2x12 / 4x12); Presence is fixed at 0.85 (no knob). */
     add("gain",     "Gain",     0.35f);
     add("bass",     "Bass",     0.50f);
     add("mid",      "Mid",      0.50f);
