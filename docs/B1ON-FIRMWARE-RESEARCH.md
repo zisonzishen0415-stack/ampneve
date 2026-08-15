@@ -95,6 +95,51 @@ reuse data blocks.
 
 ---
 
+## boot.bin (update bootloader) — container cracked, 2026-08-15
+
+`boot.bin` is a **"TIPAcYSX" container**: a header + a stream of tagged
+chunks. Load segments use the framing
+
+```
+[4B tag] [u32 addr BE] [u32 size BE] [size bytes data]
+tag = 01 59 53 58   ("YSX" type 0x01; addresses/sizes big-endian!)
+```
+
+Each segment is loaded at its own runtime address (DDR 0xC03A0000-0xC03E8000),
+so the file is NOT a linear image. Earlier header records (types 0x0D / 0x07 /
+0x04 / 0x02, short payloads: version numbers, 441 = sample-rate /100, sizes)
+precede the segments; semantics TBD.
+
+Segments (from `tools/bootbin_parse.py`):
+
+| Runtime addr | Size | Content |
+|---|---|---|
+| 0xC03AC0F0 | 16 | "System Error" string |
+| 0xC03AC100 | 127264 | **main boot code** (SYS/BIOS kernel + tasks) |
+| 0xC03CB220 | 96 | config table |
+| 0xC03E00F8 | 8 | "(null)" |
+| 0xC03E13C8 | 10628 | string table + SYS/BIOS module fxn tables |
+| 0xC03E3D60 | 7968 | code (DMA/SPI-flash flavoured: 0x280 consts, B14 paging) |
+| 0xC03E72EC | 204 | dense function-pointer table (32 entries, HWI dispatch?) |
+| 0xC03E7400 | 512 | BSS (zeros) |
+| 0xC03E7FF4 | 1384 | config table (HWI numbers/priorities) |
+
+Task/event names (normal ASCII, inside the 0xC03E13C8 segment):
+
+- `Event_MIDIDataReady` @0xC03E259E — event signalling incoming MIDI
+- `Task_VersionUpdateMIDI` @0xC03E25B2 — **the firmware-update task**
+- `Task_BootMain` — main boot task
+- `ti.sysbios.knl.Task.IdleTask`, `GateMutex_SPI` (SPI flash mutex),
+  plus `prev = %` style log format strings
+
+Not yet resolved: the TSK entry addresses (name pointers are not absolute;
+SYS/BIOS objects reference them by offset), the exact MIDI SysEx protocol
+and flash-write commands inside `Task_VersionUpdateMIDI`, and the header
+records' semantics. The 0xC03E3D60 segment's DMA/SPI-flavoured code is the
+prime candidate for the flash-write path.
+
+---
+
 ## Open items (next steps)
 
 - [ ] Global header field meanings (0x0004 / 0x00C8 / 0x02C7) — correlate with
