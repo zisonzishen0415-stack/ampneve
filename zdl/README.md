@@ -45,11 +45,13 @@ gain 0.35, master 0.55, level 0.75, presence 0.85.
   that parses the `.obj` and fails on the frozen-pedal patterns from
   SAFE-DSP-RULES: writable `.fardata`, uninitialised statics, unexpected
   undefined symbols, SBR/B14-relative relocations, missing `.audio` section.
-- NOT yet hardware-tested. The main open risk is CPU budget: ~1200
-  operations per sample per channel (20 biquads + 1024-tap FIR + saturation)
-  plus a second 1024-tap FIR during the ~12 ms cab crossfade (v17).
-  The 512-tap fallback is in `tools/gen_coeffs.py` (`CAB_IR_N`). Follow the
-  hardware test sequence below.
+- NOT yet hardware-tested. The main open risk is CPU budget: the direct
+  form runs 2x2048-tap stereo convolution (~7000-7500 cycles/sample
+  estimated - see docs/ZDL-C6000-RESEARCH.md for the measured compiler
+  analysis, the comparison with every known-working effect, and the
+  --meter TSCL probe that settles it on hardware). The 512-tap fallback
+  is in `tools/gen_coeffs.py` (`CAB_IR_N`). Follow the hardware test
+  sequence below.
 
 ## Build requirements
 
