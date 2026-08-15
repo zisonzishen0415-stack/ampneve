@@ -140,6 +140,65 @@ prime candidate for the flash-write path.
 
 ---
 
+## Preset.bin (factory patches) — structure cracked, 2026-08-15
+
+12,288 bytes:
+
+```
+[0x0000 .. 0x046E]  prefix (0xC0-pattern data, ~0x430 bytes; semantics TBD)
+[0x046F .. 0x29D9]  50 x 122-byte patch records (spacing 0x7A)
+[0x29D9 .. 0x3000]  tail, 0xFF-filled
+```
+
+Patch record (122 bytes, verified on "C-D-R" = patch[0]):
+
+```
++0x00  char[11]  patch name, NUL-terminated ("C-D-R     \0")
++0x0B  u8        record type (0x11 for patch[0])
++0x0C  ...       effect slots (bit-packed, per midimessage.md scrambling)
+       ...       chain markers: 0x01 bytes at fixed stride (~0xF apart)
+-0x02  u8,u8     trailing bytes before next name (0x0D 0x0F for patch[0])
+```
+
+Factory names visible at 0x046F..0x1429: C-D-R, 63SpringRv, Deep Blue,
+CarbonLong, 69s Vibe, Mangle Ice, LOFI Noise, SmallMooth, stairway,
+PhaseRooM, DualVerb, Rotary, EP-3 Eric, Filter Pad, CoronaCHO, Vibrato,
+M-M234, JetFlanger, SmallClone, Trem-Pan, CoronaTRI, SmoothDLY, Rockabilly,
+CarbonSTND, drunkship, Chamber RM, Church, ShimmerPAD, Long Plate,
+Gt Strings, PadGuitar, Reverse, DLY&DLY, voicerev, ...
+
+Patch records match the 146-byte MIDI patch format of `midimessage.md`
+(6 effects + name; MS-70CDR devid 0x61). Full per-slot decode = next step
+(use the bit-scrambling tables from midimessage.md).
+
+---
+
+## boot.bin — update protocol hunt (status, 2026-08-15)
+
+Container + segments cracked (see above). Data-page base discovered:
+**B14 = 0xC03E0000** (LDW *+B14[2412] = 0xC03E25B0 = the "Task_..." name
+word). Code layout:
+
+- `Task_VersionUpdateMIDI` name @0xC03E25B2, `Event_MIDIDataReady` @0xC03E259E
+- TSK module fxn table @0xC03E36E4 (0xC03B4BC8..0xC03B5064); only one call
+  site into it (0xC03B474C) — static tasks are constructed by module init,
+  not Task_create; no TSK objects with {code-ptr, stack-ptr} patterns exist
+  in .const (name references are offset-based, no absolute pointers)
+- Boot dispatch: 0xC03B9040 reads an 8-byte-entry table @0xC03E38B0 and
+  jumps indirectly (B.S2); handlers 0xC03B91F8 / 0xC03B934C / 0xC03B942C /
+  0xC03B9508 contain the boot state machine (CMPEQ 3 branches, task-name
+  accesses via B14[2412], 0xC03D0000-based data structures)
+- SPI-flash flavoured segment 0xC03E3D60 (DMA descriptor consts, 0x280)
+- Header records (types 0x0D/0x07/0x04/0x02, 13-byte payloads) still not
+  decoded; the type-0x06 chunk @0x24321 (addr 0xC03C7EC0, size 0xFFFFFFFF)
+  is likely the FF-fill tail
+
+Next: trace the 0xC03B91F8 state machine to the MIDI SysEx command parser
+(command opcodes, flash erase/write/verify, checksums); decode header
+records; identify Task entry via the state machine's task-spawn path.
+
+---
+
 ## Open items (next steps)
 
 - [ ] Global header field meanings (0x0004 / 0x00C8 / 0x02C7) — correlate with
