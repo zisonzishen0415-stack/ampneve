@@ -1,3 +1,8 @@
+> **项目状态（2026-08-16 修订）：失败。**
+> 经 G1on 实机多次验证，自制 ZDL **无法在 G1on 上稳定工作**（表现为：无 UI、bypass、或切换死机）。
+> 此前文档中的“已验证 / 可用 / 可运行 / 已对齐 / 可收口”等表述，均不代表 G1on 实机可用。
+> 本项目的 ZDL 目标当前**未达成**，现状为失败；任何后续结论不得以“G1on 可用”为前提。
+
 # ZDL C6000 Platform Research & Budget Findings
 
 Status: consolidated 2026-08-14 from the AmpNeve ZDL bring-up session.
