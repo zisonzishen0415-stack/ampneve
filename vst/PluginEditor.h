@@ -28,7 +28,7 @@ public:
 private:
     struct FactoryPreset {
         const char* name;
-        float v[9];   /* gain bass mid treble master level neve cabtype input */
+        float v[10];   /* gain bass mid treble master level neve cabtype input presence */
     };
     static const FactoryPreset factoryPresets[5];
 
@@ -51,12 +51,14 @@ private:
 
     AmpNeveAudioProcessor& processor;
     juce::Slider knobs[3];
+    juce::Slider inputKnob;               /* top small knob: input trim */
     std::unique_ptr<PresetStrip> presetStrip;
     juce::ToggleButton bypassButton{"BYPASS"};
     juce::ToggleButton pageTabs[3];
-    juce::Rectangle<int> pageHitRect;   /* LCD header "P1" hit zone (click = cycle page) */
+    juce::Rectangle<int> pageHitRect;   /* LCD header module-name hit zone */
     std::unique_ptr<juce::ComponentBoundsConstrainer> resizeConstrainer;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachments[3];
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> inputAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment;
     std::unique_ptr<juce::LookAndFeel> appLaf;
     int currentPage = 0;

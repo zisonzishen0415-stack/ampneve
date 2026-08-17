@@ -404,3 +404,31 @@ Result: no digital artifacts measurable.
   turns on the pedal can click (VST is smooth via JUCE ramping). Fix if
   heard on hardware: one-pole smoothing of v2_drive/level_gain in the audio
   loop (~4 instr, algorithm untouched).
+
+## v18c: real cab model (resonance + presence) & module UI (2026-08-15)
+
+Measured on the real IR kernels (build/_cab_analysis.py):
+
+| | 2X12 G12H30+Blue | 4X12 412M25+108F59 |
+|---|---|---|
+| LF speaker resonance | ~250 Hz +8.5 dB, Q 0.7 (broad chest bump) | ~120 Hz +7.5 dB, Q 1.1 (tighter, deeper) |
+| Presence region (4 kHz) | +4.1 dB (G12H30 bite) | +0.5 dB (essentially flat) |
+| LF/HF corners | ~65 Hz / ~5.3 kHz | ~70 Hz / ~5.3 kHz (same - kept HP40 safety) |
+
+Implementation (gen_coeffs.py): the kernel is flattened by the exact
+inverses of the fitted curves, and `AMP_CAB_RESO_LOW/HIGH` re-add them in
+the chain. Cascade of a biquad and its inverse is identity, so the default
+sound is preserved to float rounding (verified: render diff vs v18b is
+-46..-55 dBFS, inaudible). Presence blend at its 0.85 default reproduces
+the measured curve exactly (RESO_HIGH gains scaled by 1/0.85).
+
+- Presence is now a real VST parameter (#10, 0..1, default 0.85) - the 2X12
+  presence knob works (0 = flat, 0.85 = measured, 1 = full), the 4X12 stays
+  naturally subtle. ZDL keeps 9 params with presence fixed at 0.85.
+- Cab voicing chain: HP40 + LP16k + 4 identity per cab (measured corners
+  are identical between cabs; differentiation lives in the resonance and
+  presence models, per the measurement - no double-filtering).
+- VST UI: module pages TONE / AMP / CAB (3 knobs each; CAB = Neve/Cabtype/
+  Presence), Input moved to a small always-visible top knob beside the LCD.
+  Factory presets gained a presence value (0.85, matching the historical
+  fixed value). LCD module-name header stays clickable to cycle modules.
