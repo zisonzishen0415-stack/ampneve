@@ -52,15 +52,23 @@ Key decisions:
   trim for -12..-6 dBFS DI reference (same calibration as the VST).
 - **Power**: 9V DC jack → buck/linear to 3.3V analog + 3.3V digital,
   star grounding, audio-grade decoupling on CS4272 rails.
-- **Controls** (module-based, mirrors the VST):
-  - 3 potentiometers (module params) + 1 rotary encoder/push (module select)
-  - 128×64 OLED (SSD1306, I2C) showing: module (TONE/AMP/CAB), param,
-    value, input meter — or a 2×16 LCD as the cheap fallback
-  - 1 footswitch (soft-bypass + relay output for true bypass), bypass LED
-  - Option: 2nd footswitch for preset up/down (or module cycling)
-- **Params on the pedal**: the 10 VST params are mapped to 3 pots × modules
-  (TONE: Bass/Mid/Treble, AMP: Gain/Master/Level, CAB: Neve/Cabtype/
-  Presence) + Input trim as an internal/top trimmer (or 4th pot).
+- **Controls** (4 push-encoders + OLED; mirrors the VST module concept):
+
+  | Knob | Rotate | Short press | Long press |
+  |---|---|---|---|
+  | K1-K3 | current module's params (TONE: Bass/Mid/Treble, AMP: Gain/Master/Level, CAB: Neve/Cabtype/Presence) | reset that param to default (VST double-click equivalent) | — |
+  | K4 | **Input trim (constant**, like the VST's 4th knob) | reset Input to 1.0 | — |
+  | K1 long | — | — | cycle module TONE->AMP->CAB |
+  | K2 long | — | — | bypass toggle (synced with footswitch) |
+  | K3 long | — | — | save current as preset (10 flash slots) |
+  | K4 long | — | — | load next preset |
+  | Footswitch | — | bypass (LED) | (reserved: tuner) |
+
+  - Encoders: EC11-style detented, endless; rotation = value step (fine
+    under slow turns); values shown on the OLED (no pointer on the knob).
+  - OLED 128x64 (SSD1306, I2C): main screen = module name + 4 param rows
+    (name, value bar, value) + input meter + bypass state; feedback
+    screens for reset/preset operations.
 - **Debug/verification**: UART or USB-CDC dump of rendered test WAVs.
 
 ## 4. Software architecture
