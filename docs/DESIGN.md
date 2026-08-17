@@ -432,3 +432,25 @@ the measured curve exactly (RESO_HIGH gains scaled by 1/0.85).
   Presence), Input moved to a small always-visible top knob beside the LCD.
   Factory presets gained a presence value (0.85, matching the historical
   fixed value). LCD module-name header stays clickable to cycle modules.
+
+## v18d: Neve stage rebuilt (measured + knob-as-depth, 2026-08-15)
+
+Baseline measurement of the old stage showed three flaws:
+- h2 was ~constant (-23..-25 dB) across input levels - real transformers
+  have level-DEPENDENT even harmonics (quiet = clean)
+- the 1073 EQ peaked at +1.4 dB (barely a brand color)
+- the knob only mixed dry/wet; EQ never changed with it
+
+New stage (all ZDL-safe):
+- Dedicated transformer core: linear to 0.7 (97.6% at 1.0), soft saturation
+  to 1.45 @ 2.0, flat tail (monotonic, C1; fitted offline, slopes 1->0.05)
+- Level-dependent even term k*x^2*min(|x|,1): h2 now grows with drive
+  (measured: -35 -> -27 dB from -24 -> -6 dBFS input; quiet stays clean)
+- 1073 EQ re-tuned to measured character (LF shelf 110Hz +2.5dB, mid
+  peaking 700Hz +2.0dB Q0.7, HF shelf 12k +3.5dB) and baked at 8 depth
+  steps (no runtime pow - ZDL-safe); set 0 = flat
+- Neve knob = coloration DEPTH: drives the transformer (0.6x..2.0x) AND
+  selects the EQ depth step; 0 = clean, 1 = full brand color
+- Verified: zero aliasing/DC; DI diff vs v18c is -38 dBFS (the intended
+  deeper color); THD slightly lower at quiet (transformer core is
+  near-linear, odd harmonics stay low)

@@ -245,14 +245,31 @@ C.append('{ ' + ', '.join(f'{v:.9f}f' for v in pre_lp1) + ' };\n')
 C.append('static const AmpBiquad AMP_PRE_LP2 = ')
 C.append('{ ' + ', '.join(f'{v:.9f}f' for v in pre_lp2) + ' };\n\n')
 
-# --- neve 1073-style: LF shelf 110 +1.5dB, mid 700 +1dB Q0.7, HF shelf 12k +1.5dB
-neve_lf = shelf(FS, 110.0, 1.5, False)
-neve_mid = peaking(FS, 700.0, 0.7, 1.0)
-neve_hf = shelf(FS, 12000.0, 1.5, True)
-C.append('/* neve 1073-style tone (fixed brand color) */\n')
-C.append('static const AmpBiquad AMP_NEVE[] = {\n')
-C.append(fmt('lf shelf 110 +1.5dB', neve_lf)); C.append(fmt('mid 700 +1dB', neve_mid)); C.append(fmt('hf shelf 12k +1.5dB', neve_hf))
-C.append('};\n#define AMP_NEVE_N 3\n\n')
+# --- neve 1073-style EQ, baked at 8 depth steps (Neve knob = depth).
+# base curves (measured 1073 character): LF shelf 110 +2.5dB,
+# mid peaking 700 +2.0dB Q0.7, HF shelf 12k +3.5dB (air).
+NEVE_BASE = [('lf shelf 110 +2.5dB', shelf(FS, 110.0, 2.5, False)),
+             ('mid 700 +2.0dB',     peaking(FS, 700.0, 0.7, 2.0)),
+             ('hf shelf 12k +3.5dB', shelf(FS, 12000.0, 3.5, True))]
+NEVE_DEPTH_STEPS = 8
+C.append(f'/* neve 1073-style EQ, {NEVE_DEPTH_STEPS} depth steps (knob = depth, '
+         f'ZDL-safe: no runtime pow) */\n')
+C.append('static const AmpBiquad AMP_NEVE_SETS[8][3] = {\n')
+for k in range(NEVE_DEPTH_STEPS):
+    depth = k / (NEVE_DEPTH_STEPS - 1.0)
+    C.append(f'    {{ /* depth {depth:.2f} */\n')
+    for label, base in NEVE_BASE:
+        # identity at depth 0; shelf()/peaking() with gain scaled by depth
+        if depth <= 0.0:
+            C.append(fmt(label + ' (flat)', IDENTITY, indent='        '))
+        else:
+            db = float(label.split('+')[1].split('dB')[0])
+            bq = shelf(FS, 110.0, db * depth, False) if 'lf shelf' in label else \
+                 (peaking(FS, 700.0, 0.7, db * depth) if 'mid' in label else \
+                  shelf(FS, 12000.0, db * depth, True))
+            C.append(fmt(label, bq, indent='        '))
+    C.append('    },\n')
+C.append('};\n#define AMP_NEVE_N 3\n#define AMP_NEVE_DEPTH_STEPS 8\n\n')
 
 # --- tone network runtime constants (Bass/Mid/Treble). ---
 def tone_consts(f0, q, high_shelf):

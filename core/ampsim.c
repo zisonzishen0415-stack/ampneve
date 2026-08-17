@@ -38,8 +38,7 @@ typedef struct {
     float sag_attack_c, sag_release_c;
 
     /* output transformer (Neve brand color) */
-    float neve;                 /* coloration amount, 0..1 (0 = bypass) */
-    float neve_g;
+    float neve;                 /* coloration depth, 0..1 (0 = clean) */
     float tr_x1, tr_y1;         /* transformer DC block */
     Bq neve_bq[3];
 
@@ -169,6 +168,34 @@ static float clip_pp(float x) {
     return s * y;
 }
 
+/* Output-transformer core (Neve): near-linear to ~0.7 (97.6% at 1.0),
+ * soft saturation to 1.45 @ 2.0, flat tail - a transformer saturates
+ * late and gently, unlike a tube's knee. Monotonic, C1, ZDL-safe.
+ * Fitted offline (slopes 1.0 -> 0.05 over the cubic). */
+static float tr_core(float x) {
+    float ax = x < 0.0f ? -x : x;
+    float y;
+    if (ax <= 0.70f) {
+        y = ax;
+    } else if (ax <= 2.00f) {
+        float t = (ax - 0.70f) * 0.769230769f;   /* 1/1.3 */
+        y = 0.70f + 1.30f * t - 0.415f * t * t - 0.135f * t * t * t;
+    } else {
+        y = 1.45f;
+    }
+    return x < 0.0f ? -y : y;
+}
+
+/* Output-transformer saturation: soft core + level-dependent even
+ * harmonics (k*x^2*|x| grows with drive - a transformer's h2 rises with
+ * level, unlike the old constant-amount c2^2 term). Monotonic overall,
+ * ZDL-safe. */
+static float tr_sat(float x) {
+    float ax = x < 0.0f ? -x : x;
+    float lf = ax < 1.0f ? ax : 1.0f;
+    return tr_core(x) + 0.16f * x * x * lf;
+}
+
 /* RBJ peaking biquad with linear gain A (0.5..1.5), fixed w0 constants.
  * Only multiply-add + recip_approx at set_param time. */
 static void tone_peaking(Bq* b, float cosw, float alpha, float A) {
@@ -184,16 +211,20 @@ static void tone_peaking(Bq* b, float cosw, float alpha, float A) {
 }
 
 /* Reload the cabtype-dependent fixed stages (speaker resonance, cab
- * voicing chain). The IR swap + crossfade is handled by set_param.
- * Biquad STATE is preserved (bq_load_keep) so switching cab mid-stream
- * does not pop. */
+ * voicing chain) and the Neve EQ depth set for the current knob value.
+ * The IR swap + crossfade is handled by set_param. Biquad STATE is
+ * preserved (bq_load_keep) so switching cab mid-stream does not pop. */
 static void update_cab_coeffs(Ampsim* a) {
     AmpsimState* s = &a->s;
     int i;
     int ct = (s->cabtype >= 0.5f) ? 1 : 0;
     if (ct >= AMP_CAB_TYPES) ct = AMP_CAB_TYPES - 1;
-    for (i = 0; i < AMP_NEVE_N; ++i)
-        bq_load_keep(&s->neve_bq[i], &AMP_NEVE[i]);
+    for (i = 0; i < AMP_NEVE_N; ++i) {
+        int set = (int)(s->neve * (AMP_NEVE_DEPTH_STEPS - 1.0f) + 0.5f);
+        if (set < 0) set = 0;
+        if (set >= AMP_NEVE_DEPTH_STEPS) set = AMP_NEVE_DEPTH_STEPS - 1;
+        bq_load_keep(&s->neve_bq[i], &AMP_NEVE_SETS[set][i]);
+    }
     for (i = 0; i < AMP_CAB_VOICE_N; ++i)
         bq_load_keep(&s->cab_voice[i], &AMP_CAB_VOICE[ct][i]);
     bq_load_keep(&s->reso_low, &AMP_CAB_RESO_LOW[ct]);
@@ -260,7 +291,6 @@ Ampsim* Ampsim_init(void* mem, uint32_t bytes, float sample_rate) {
     s->pi_drive = 0.35f + 0.65f * s->master;
     s->pp_drive = 0.30f + 0.75f * s->master;
     s->sag_amt = 0.24f * s->master;
-    s->neve_g = 1.2f;
     s->level_gain = 0.20f + 0.70f * s->level;
 
     /* one-pole time constants (approx tau = 1/(fs*c)); no division */
@@ -332,6 +362,13 @@ void Ampsim_set_param(Ampsim* a, AmpsimParam p, float v) {
         s->level_gain = 0.20f + 0.70f * v;
     } else if (p == AMP_PARAM_NEVE) {
         s->neve = v;
+        /* EQ depth follows the knob (pre-baked sets, ZDL-safe) */
+        int set = (int)(v * (AMP_NEVE_DEPTH_STEPS - 1.0f) + 0.5f);
+        int qi;
+        if (set < 0) set = 0;
+        if (set >= AMP_NEVE_DEPTH_STEPS) set = AMP_NEVE_DEPTH_STEPS - 1;
+        for (qi = 0; qi < AMP_NEVE_N; ++qi)
+            bq_load_keep(&s->neve_bq[qi], &AMP_NEVE_SETS[set][qi]);
     } else if (p == AMP_PARAM_PRESENCE) {
         s->presence = v;
     }
@@ -426,20 +463,21 @@ void Ampsim_process(Ampsim* a, float in, float* out) {
         x = clip_pp(x * s->pp_drive * sag);
     }
 
-    /* 7. output transformer: Neve even harmonics + 1073 EQ (brand color).
-     *    The Neve knob is a wet/dry blend around the whole stage. */
+    /* 7. output transformer: dedicated soft saturation with level-dependent
+     *    even harmonics + 1073 EQ. The Neve knob is a coloration DEPTH:
+     *    it drives the transformer harder AND deepens the EQ (both follow
+     *    the knob; 0 = clean, 1 = full brand color). */
     {
         float dry = x;
-        float g = s->neve_g;
-        float c1 = clip_ts(x * g);
-        float c2 = clip_ts(x * g * 1.6f);
-        float sat = c1 + 0.15f * c2 * c2;          /* asymmetric */
+        float w = s->neve;
+        float dx = x * (0.6f + 1.4f * w);       /* transformer drive */
+        float sat = tr_sat(dx);
         float dy = sat - s->tr_x1 + 0.995f * s->tr_y1;   /* DC block */
         s->tr_x1 = sat;
         s->tr_y1 = dy;
         float y = dy;
         for (i = 0; i < 3; ++i) y = bq_run(&s->neve_bq[i], y);
-        x = dry * (1.0f - s->neve) + (y * 0.9f) * s->neve;  /* 1073 trim in wet */
+        x = dry * (1.0f - w) + (y * 0.9f) * w;  /* 1073 trim in wet */
     }
 
     /* 8. speaker resonance + cabinet voicing (selected cab type) */

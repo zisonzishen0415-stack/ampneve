@@ -2,16 +2,16 @@ AmpNeve gain-naturalness measurements (tools/compare_gain.py)
 References: stock BASSDRV (firmware disassembly) + PurestDrive (exact port)
 ======================================================================
 == 1 kHz harmonic ladder (rel fundamental, dB) ==
-amp g=0.20: THD=-19.0dB folded=-240dB dc=-0.0000
-    1:-9 2:-32 3:-31 4:-40 5:-69 6:-70 7:-78
-amp g=0.35: THD=-14.0dB folded=-240dB dc=+0.0000
-    1:-8 2:-33 3:-23 4:-39 5:-35 6:-59 7:-58 8:-77
-amp g=0.60: THD=-11.6dB folded=-240dB dc=-0.0000
-    1:-8 2:-34 3:-20 4:-36 5:-30 6:-53 7:-50 8:-70 9:-66 10:-79
-amp g=0.80: THD=-11.1dB folded=-240dB dc=+0.0000
-    1:-8 2:-35 3:-20 4:-36 5:-29 6:-52 7:-48 8:-68 9:-64 10:-76
-amp g=1.00: THD=-10.9dB folded=-240dB dc=-0.0000
-    1:-8 2:-35 3:-19 4:-36 5:-28 6:-51 7:-47 8:-67 9:-63 10:-75
+amp g=0.20: THD=-20.7dB folded=-240dB dc=-0.0000
+    1:-4 2:-31 3:-26 4:-45 5:-63 6:-69 7:-70
+amp g=0.35: THD=-14.7dB folded=-240dB dc=-0.0000
+    1:-4 2:-32 3:-20 4:-43 5:-32 6:-72 7:-55 9:-78
+amp g=0.60: THD=-12.3dB folded=-240dB dc=+0.0000
+    1:-5 2:-33 3:-18 4:-37 5:-27 6:-56 7:-47 8:-74 9:-64
+amp g=0.80: THD=-11.8dB folded=-240dB dc=+0.0000
+    1:-5 2:-33 3:-17 4:-36 5:-26 6:-53 7:-45 8:-71 9:-61
+amp g=1.00: THD=-11.5dB folded=-240dB dc=+0.0000
+    1:-5 2:-34 3:-17 4:-36 5:-26 6:-52 7:-45 8:-69 9:-60 10:-78 11:-79
 purest i=0.5: THD=-68.4dB folded=-240dB dc=+0.0000 peak=0.251
     1:-12
 purest i=1.0: THD=-62.4dB folded=-240dB dc=+0.0000 peak=0.250
@@ -22,81 +22,81 @@ purest 12k (4x in): folded=-240dB  []
 amp 4k g=1.0: folded=-240dB  []
 purest 4k (4x in): folded=-240dB  []
 == IMD g=1.0 (1.2k + 1.8k, -12 dBFS each) ==
-  2f1-f2     600 Hz: -9.2 dB rel
-  2f1       2400 Hz: -5.8 dB rel
-  2f2       3600 Hz: -12.6 dB rel
-  3f1       3600 Hz: -12.6 dB rel
-  f1+f2     3000 Hz: -11.1 dB rel
-  2f1+f2    4200 Hz: -7.7 dB rel
-  f1+2f2    4800 Hz: -19.9 dB rel
-  5f1       6000 Hz: -34.9 dB rel
-  3f2       5400 Hz: -40.7 dB rel
+  2f1-f2     600 Hz: -8.8 dB rel
+  2f1       2400 Hz: -6.1 dB rel
+  2f2       3600 Hz: -13.0 dB rel
+  3f1       3600 Hz: -13.0 dB rel
+  f1+f2     3000 Hz: -11.6 dB rel
+  2f1+f2    4200 Hz: -8.1 dB rel
+  f1+2f2    4800 Hz: -20.2 dB rel
+  5f1       6000 Hz: -38.4 dB rel
+  3f2       5400 Hz: -42.4 dB rel
 == impulse (DC tail / thump) ==
-  peak 0.3070 mean -0.000000 decay-to-40dB 16.7 ms
+  peak 0.4971 mean -0.000000 decay-to-40dB 16.7 ms
 == compression curve (1k sine, g=1.0, rms out dBFS vs in) ==
-  in -40 dBFS -> out  -21.0 dBFS
-  in -30 dBFS -> out  -13.0 dBFS
-  in -24 dBFS -> out  -11.3 dBFS
-  in -18 dBFS -> out  -10.7 dBFS
-  in -12 dBFS -> out  -10.4 dBFS
-  in  -9 dBFS -> out  -10.2 dBFS
-  in  -6 dBFS -> out  -10.0 dBFS
-  in  -3 dBFS -> out   -9.9 dBFS
+  in -40 dBFS -> out  -15.7 dBFS
+  in -30 dBFS -> out   -7.8 dBFS
+  in -24 dBFS -> out   -7.4 dBFS
+  in -18 dBFS -> out   -7.6 dBFS
+  in -12 dBFS -> out   -7.7 dBFS
+  in  -9 dBFS -> out   -7.8 dBFS
+  in  -6 dBFS -> out   -7.9 dBFS
+  in  -3 dBFS -> out   -8.0 dBFS
 == tone knob range (response @freq, g=0.2) ==
-  bass    @  140Hz: span +16.8 dB  (v0 -22.7 / v0.5 -11.4 / v1 -5.9)
-  mid     @  850Hz: span +16.7 dB  (v0 -27.1 / v0.5 -15.8 / v1 -10.4)
-  treble  @ 5000Hz: span +18.0 dB  (v0 -36.6 / v0.5 -25.0 / v1 -18.7)
+  bass    @  140Hz: span +13.3 dB  (v0 -17.9 / v0.5 -6.6 / v1 -4.6)
+  mid     @  850Hz: span +16.6 dB  (v0 -21.8 / v0.5 -10.4 / v1 -5.2)
+  treble  @ 5000Hz: span +18.0 dB  (v0 -32.1 / v0.5 -20.5 / v1 -14.2)
 == response (sweep) ==
-amp g=0.20: response range -57.1..+7.0 dB (ref 1k)
-         20 Hz: -33.5 dB
-         24 Hz: -20.7 dB
-         29 Hz: -27.7 dB
-         34 Hz: -20.7 dB
-         41 Hz: -16.3 dB
-         48 Hz: -17.1 dB
-         98 Hz: +2.8 dB
-        118 Hz: +4.6 dB
-        140 Hz: +5.0 dB
-        168 Hz: +5.6 dB
-        200 Hz: +6.0 dB
-        239 Hz: +6.7 dB
-        285 Hz: +7.0 dB
-        340 Hz: +5.5 dB
-        406 Hz: +4.7 dB
+amp g=0.20: response range -57.4..+6.5 dB (ref 1k)
+         20 Hz: -34.3 dB
+         24 Hz: -20.3 dB
+         29 Hz: -28.8 dB
+         34 Hz: -21.7 dB
+         41 Hz: -17.1 dB
+         48 Hz: -17.9 dB
+         98 Hz: +2.6 dB
+        118 Hz: +4.3 dB
+        140 Hz: +4.5 dB
+        168 Hz: +5.1 dB
+        200 Hz: +5.5 dB
+        239 Hz: +6.2 dB
+        285 Hz: +6.5 dB
+        340 Hz: +5.2 dB
+        406 Hz: +4.5 dB
         485 Hz: +3.9 dB
-        579 Hz: +4.2 dB
-        691 Hz: +5.7 dB
-       5789 Hz: -19.4 dB
-       6910 Hz: -25.2 dB
-       8249 Hz: -36.1 dB
-       9848 Hz: -40.3 dB
-      11756 Hz: -52.5 dB
-      14034 Hz: -48.9 dB
-      16754 Hz: -56.7 dB
-      20000 Hz: -57.1 dB
-amp g=1.00: response range -43.6..+6.9 dB (ref 1k)
-         20 Hz: -10.8 dB
-         98 Hz: +3.1 dB
-        118 Hz: +4.7 dB
-        140 Hz: +5.1 dB
-        168 Hz: +5.6 dB
-        200 Hz: +6.0 dB
-        239 Hz: +6.7 dB
-        285 Hz: +6.9 dB
-        340 Hz: +5.4 dB
-        406 Hz: +4.6 dB
-        485 Hz: +3.9 dB
-        579 Hz: +4.2 dB
-        691 Hz: +5.7 dB
-       5789 Hz: -15.7 dB
-       6910 Hz: -18.2 dB
-       8249 Hz: -18.2 dB
-       9848 Hz: -22.6 dB
-      11756 Hz: -34.3 dB
-      14034 Hz: -27.2 dB
-      16754 Hz: -43.6 dB
-      20000 Hz: -42.7 dB
+        579 Hz: +4.3 dB
+        691 Hz: +5.9 dB
+       5789 Hz: -20.1 dB
+       6910 Hz: -25.9 dB
+       8249 Hz: -36.6 dB
+       9848 Hz: -40.6 dB
+      11756 Hz: -52.4 dB
+      14034 Hz: -49.4 dB
+      16754 Hz: -57.0 dB
+      20000 Hz: -57.4 dB
+amp g=1.00: response range -43.4..+6.4 dB (ref 1k)
+         20 Hz: -11.3 dB
+         98 Hz: +2.9 dB
+        118 Hz: +4.4 dB
+        140 Hz: +4.7 dB
+        168 Hz: +5.1 dB
+        200 Hz: +5.6 dB
+        239 Hz: +6.3 dB
+        285 Hz: +6.4 dB
+        340 Hz: +5.1 dB
+        406 Hz: +4.5 dB
+        485 Hz: +3.8 dB
+        579 Hz: +4.3 dB
+        691 Hz: +5.9 dB
+       5789 Hz: -16.2 dB
+       6910 Hz: -18.8 dB
+       8249 Hz: -18.7 dB
+       9848 Hz: -23.0 dB
+      11756 Hz: -34.6 dB
+      14034 Hz: -27.6 dB
+      16754 Hz: -43.4 dB
+      20000 Hz: -43.3 dB
 == DI guitar (18s) ==
-amp g0.80        peak=0.890 rms=0.3248 fizz(8-16k rel 0.5-4k)=-64.7dB nyqfloor(19-22k)=-104.8dB
-amp g0.35        peak=0.890 rms=0.2879 fizz(8-16k rel 0.5-4k)=-78.9dB nyqfloor(19-22k)=-104.8dB
+amp g0.80        peak=0.890 rms=0.3280 fizz(8-16k rel 0.5-4k)=-65.8dB nyqfloor(19-22k)=-104.8dB
+amp g0.35        peak=0.890 rms=0.2900 fizz(8-16k rel 0.5-4k)=-79.4dB nyqfloor(19-22k)=-104.8dB
 purest i1.0 x1.6 peak=0.988 rms=0.2013 fizz(8-16k rel 0.5-4k)=-44.5dB nyqfloor(19-22k)=-83.0dB
