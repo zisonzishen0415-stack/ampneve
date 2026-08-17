@@ -127,6 +127,25 @@ public:
             g.setFont(juce::Font(12.0f, juce::Font::bold));
             g.drawText(b.getButtonText(), r.withTrimmedLeft(26.0f),
                        juce::Justification::centredLeft, false);
+        } else if (tag == "tab") {
+            /* physical push-button: raised body + bevel + drop shadow,
+             * sinks 1 px when pressed; active module gets an LED */
+            bool down = b.isDown();
+            auto body = r.reduced(0.5f).translated(0, down ? 1 : 0);
+            g.setColour(juce::Colour(0x66000000));
+            g.fillRoundedRectangle(body.translated(0, 2), 6.0f);
+            juce::ColourGradient grad(juce::Colour(0xff343a45), 0, body.getY(),
+                                      juce::Colour(0xff15171c), 0, body.getBottom(), false);
+            g.setGradientFill(grad);
+            g.fillRoundedRectangle(body, 6.0f);
+            g.setColour(juce::Colour(0x2effffff));
+            g.fillRoundedRectangle(body.withTrimmedBottom(body.getHeight() - 2.0f), 6.0f);
+            g.setColour(on ? accent : chipBorder);
+            g.drawRoundedRectangle(body, 6.0f, 1.0f);
+            auto led = juce::Rectangle<float>(r.getCentreX() - 3.0f, r.getY() + 4.0f, 6.0f, 6.0f);
+            if (on) { g.setColour(accentSoft); g.fillEllipse(led.expanded(2.0f)); }
+            g.setColour(on ? accent : ledOff);
+            g.fillEllipse(led);
         } else if (tag == "icon-left" || tag == "icon-right") {
             auto c = r.getCentre();
             float s = 4.5f;
@@ -161,6 +180,7 @@ public:
         auto r = b.getLocalBounds().toFloat();
         bool on = b.getToggleState();
         bool en = b.isEnabled();
+        if (tag == "tab") r = r.withTrimmedTop(4.0f);   /* LED sits at the top */
         g.setColour(!en ? textDim.withAlpha(0.5f) : (on ? accent : text));
         g.setFont(juce::Font(12.0f, juce::Font::bold));
         g.drawText(b.getButtonText(), r, juce::Justification::centred, false);
@@ -382,8 +402,7 @@ AmpNeveAudioProcessorEditor::~AmpNeveAudioProcessorEditor() {
 }
 
 juce::Rectangle<int> AmpNeveAudioProcessorEditor::lcdRect() const {
-    /* LCD loses the right column to the top input knob */
-    return { 16, 16, getWidth() - 32 - 64, 186 };
+    return { 16, 16, getWidth() - 32, 186 };
 }
 
 juce::Rectangle<int> AmpNeveAudioProcessorEditor::slotRect(int slot) const {
@@ -562,21 +581,20 @@ void AmpNeveAudioProcessorEditor::paint(juce::Graphics& g) {
                    juce::Justification::centred, false);
     }
 
-    /* top input knob label (below the knob) */
-    auto lcd2 = lcdRect();
+    /* input knob label (4th knob in the row, under it) */
+    auto ir = knobRect(3);
     g.setColour(textDim);
     g.setFont(juce::Font(10.0f, juce::Font::bold));
-    g.drawText("INPUT", lcd2.getRight() + 10, lcd2.getY() + (lcd2.getHeight() - 44) / 2 + 48,
-               48, 12, juce::Justification::centred, false);
+    g.drawText("INPUT", ir.getX() - 10, ir.getBottom() + 4, ir.getWidth() + 20, 12,
+               juce::Justification::centred, false);
 }
 
 void AmpNeveAudioProcessorEditor::resized() {
     auto lcd = lcdRect();
     for (int i = 0; i < 3; ++i)
         knobs[i].setBounds(knobRect(i));
-    /* top small input knob, right column of the LCD */
-    int ks = 44;
-    inputKnob.setBounds(lcd.getRight() + 14, lcd.getY() + (lcd.getHeight() - ks) / 2, ks, ks);
+    /* input = 4th knob in the same row */
+    inputKnob.setBounds(knobRect(3));
     auto area = getLocalBounds();
     auto btnRow = area.removeFromBottom(34);
     bypassButton.setBounds(16, btnRow.getY(), 108, 26);
