@@ -1,8 +1,47 @@
 # AmpNeve Pedal — Full-Algorithm Hardware Design
 
-Status: design (2026-08-15). Goal: a real hardware pedal running the **full
-AmpNeve algorithm** (2048-tap real-IR convolution, no compromise), verified
+Status: design (2026-08-15). Goal: a hardware **effects pedal platform**
+running native effects with a plugin-style API. Effect #1: AmpNeve (full
+2048-tap real-IR convolution, no compromise). Effect #2 (planned):
+Reverson reverse reverb (the user's own DSP). Architecture verified
 byte-for-byte against the x86 reference via `tools/compare_gain.py`.
+
+## Platform concept
+
+- Mono guitar in → **stereo out** (guitar effects convention: amp/drive
+  mono, reverb/delay/chorus stereo). CS4272 is a stereo codec — wiring
+  supports AINL/AINR and AOUTL/AOUTR from day one.
+- **Effect library in QSPI flash** (W25Q64): every effect ships as a small
+  self-describing module (code in MCU flash, per-effect constants/tables in
+  QSPI or MCU flash). Loading a different effect = switch its process
+  function + reload its constants; state zeroed on switch (crossfade to
+  avoid pops).
+- **Effect API** (native, mirroring the ZDL ABI lessons):
+
+  ```c
+  typedef struct AmpFx {
+      const char* name;
+      int nparams;
+      void (*init)(void* state, float sr);
+      void (*set_param)(void* state, int idx, float v);
+      void (*process)(void* state, const float* in, float* out, int n,
+                      float sr);
+      uint32_t state_size;
+  } AmpFx;
+  ```
+
+  Effects: AmpNeve (10 params), Reverson reverse reverb (9 params), plus
+  small stock effects (drive, delay, reverb, chorus) for the platform.
+- **Chain**: up to 2 effects in series. Budget: AmpNeve ~45% of one core;
+  a delay/reverb-class effect ~5-15% → comfortable. Two 2048-tap
+  convolutions would be ~90% (documented, not a target).
+- **Presets**: 50+ slots in QSPI (10 shown on the pedal, full bank via
+  USB).
+- **USB-C (H750 OTG FS)**: firmware update + effect/preset transfer — a
+  PC tool (or drag-and-drop mass-storage mode) replaces "Zoom Effect
+  Manager" for this platform.
+- **Footswitches**: FS1 bypass, FS2 = next effect / preset up (long-press
+  = preset save).
 
 ## 1. Platform decision
 
@@ -19,17 +58,21 @@ M7 → ~94% core: **too tight**. The convolution MUST be `arm_fir_f32`
 (block-based, unrolled) or an equivalently optimized loop. Everything else
 (ampsim chain) is sample-based plain C and ports as-is.
 
-## 2. Performance budget (mono, 44.1kHz)
+## 2. Performance budget (mono in, 44.1kHz)
 
 | Block | Cost | Core % |
 |---|---:|---:|
 | 2048-tap FIR (arm_fir_f32, ~2 cyc/tap) | 181M cyc/s | 38% |
 | Amp chain (biquads, clips, env, tone) | ~100-200 cyc/sample | ~5% |
 | DC blocks, blends, crossfade | ~30 cyc/sample | ~1% |
-| **Total** | | **~45% of one 480MHz core** |
+| **AmpNeve total** | | **~45% of one 480MHz core** |
+| Reverson-class reverse reverb (delay-line based) | ~50-150 cyc/sample | ~5-10% |
+| **AmpNeve + Reverson chain** | | **~55%** (comfortable) |
+| Stereo output copy | trivial | — |
 
 Latency: block 64 samples = 1.45 ms + codec ~1 ms ≈ **2.5 ms** (inaudible).
-Memory: IR 8KB + dual delay 16KB + state ~17KB → all in DTCM (128KB) ✓.
+Memory: IR 8KB + dual delay 16KB + state ~17KB per effect → DTCM (128KB)
+fits two effects' state; IRs/tables for non-active effects stay in QSPI.
 
 ## 3. Hardware
 
@@ -60,9 +103,10 @@ Key decisions:
   | K4 | **Input trim (constant**, like the VST's 4th knob) | reset Input to 1.0 | — |
   | K1 long | — | — | cycle module TONE->AMP->CAB |
   | K2 long | — | — | bypass toggle (synced with footswitch) |
-  | K3 long | — | — | save current as preset (10 flash slots) |
+  | K3 long | — | — | save current as preset (flash slots) |
   | K4 long | — | — | load next preset |
-  | Footswitch | — | bypass (LED) | (reserved: tuner) |
+  | FS1 (footswitch) | — | bypass (LED) | (reserved: tuner) |
+  | FS2 (footswitch) | — | next effect / preset up | long-press = save |
 
   - Encoders: EC11-style detented, endless; rotation = value step (fine
     under slow turns); values shown on the OLED (no pointer on the knob).
@@ -111,10 +155,12 @@ Porting notes:
 | Phase | Deliverable | Est. |
 |---|---|---|
 | 0. Board bring-up | H750 core board + CS4272 board, I2S loopback, UART printf | 1-2 weeks |
-| 1. DSP port + verify | core ports, FIR optimized, compare_gain protocol passes on target | days |
-| 2. Control surface | pots/encoder/OLED/footswitch + smoothing + bypass | 1 week |
-| 3. Hardware finalize | schematic → PCB (input buffer, power, codec, MCU) → prototype → enclosure | 2-4 weeks |
-| 4. Polish | true-bypass relay, noise floor (<-100dB), battery option, preset storage (flash) | 1 week |
+| 1. DSP port + verify | AmpNeve core ports, FIR optimized, compare_gain protocol passes on target | days |
+| 2. Control surface | encoders/OLED/footswitches + smoothing + bypass crossfade | 1 week |
+| 3. Platform core | effect API + registry, QSPI effect library, preset storage, USB-C loader (firmware + effects) | 1-2 weeks |
+| 4. Reverson port | reverse reverb as effect #2 on the same API + compare_gain verify | 1 week |
+| 5. Hardware finalize | schematic → PCB (input buffer, power, codec, MCU) → prototype → enclosure | 2-4 weeks |
+| 6. Polish | true-bypass relay, noise floor (<-100dB), battery option, stock effect set | 1 week |
 
 ## 7. Risks & fallbacks
 
